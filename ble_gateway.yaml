@@ -78,8 +78,25 @@ mqtt:
                 id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
             }
             else if (x.find("on#") == 0) {
-                int v = atoi(x.substr(3).c_str());
-                ESP_LOGW("CMD", "ctlight brightness=%d", v);
+                std::string rest = x.substr(3);
+                int v = atoi(rest.c_str());
+
+                // 色温（有才发，没有就跳过）
+                size_t p2 = rest.find('#');
+                if (p2 != std::string::npos) {
+                    int k = atoi(rest.substr(p2 + 1).c_str());
+                    ESP_LOGW("CMD", "ctlight color=%dK bright=%d", k, v);
+                    if (k <= 3100)
+                        id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
+                    else if (k <= 5000)
+                        id(tx).send_hex("0201021BFF114D191248802770000001B9491DDDF080809727277070005F1A|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
+                    else
+                        id(tx).send_hex("0201021BFF114D1917488027700000018181C2D8277070005FC86FB84848F0|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
+                } else {
+                    ESP_LOGW("CMD", "ctlight bright=%d", v);
+                }
+
+                // 亮度（始终发）
                 if (v <= 10)
                     id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
                 else if (v <= 30)
@@ -95,6 +112,7 @@ mqtt:
                 else
                     id(tx).send_hex("0201021BFF114D191B48802770000001267121FF5FC86FB84848A7F08080C4|0201021BFF114D191E48802770000001015FC86FB84848A7F0808097272772");
             }
+
 
     # ==========================================================
     #  餐厅风扇  (ctfan003)
@@ -139,8 +157,23 @@ mqtt:
                 id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
             }
             else if (x.find("on#") == 0) {
-                int v = atoi(x.substr(3).c_str());
-                ESP_LOGW("CMD", "cwlight brightness=%d", v);
+                std::string rest = x.substr(3);
+                int v = atoi(rest.c_str());
+
+                size_t p2 = rest.find('#');
+                if (p2 != std::string::npos) {
+                    int k = atoi(rest.substr(p2 + 1).c_str());
+                    ESP_LOGW("CMD", "cwlight color=%dK bright=%d", k, v);
+                    if (k <= 3100)
+                        id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2C2570005CBF1D60F0F0FC3FCF97|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
+                    else if (k <= 5000)
+                        id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5893FCFCF9D2D2D7070005C72|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
+                    else
+                        id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5033FCFCF9D2D2D7070005CE8|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
+                } else {
+                    ESP_LOGW("CMD", "cwlight bright=%d", v);
+                }
+
                 if (v <= 10)
                     id(tx).send_hex("0201021BFF114D191DF0CF2D7000000171010DBD1D60F0F0FC3FCFCF9D2D7B|0201021BFF114D191EF0CF2D70000001015CBF1D60F0F0FC3FCFCF9D2D2D72");
                 else if (v <= 30)
