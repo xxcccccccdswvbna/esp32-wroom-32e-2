@@ -72,9 +72,9 @@ mqtt:
   on_message:
 
     # ==========================================================
-    #  餐厅灯  (巴法云 topic: ct_light004)
+    #  餐厅灯  (巴法云 topic: ctlight004)
     # ==========================================================
-    - topic: "ct_light004/set"
+    - topic: "ctlight004/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "ct_light <- [%s]", x.c_str());
@@ -117,9 +117,9 @@ mqtt:
             }
 
     # ==========================================================
-    #  餐厅风扇  (巴法云 topic: ct_fan005)
+    #  餐厅风扇  (巴法云 topic: ctfan005)
     # ==========================================================
-    - topic: "ct_fan005/set"
+    - topic: "ctfan005/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "ct_fan <- [%s]", x.c_str());
@@ -145,9 +145,9 @@ mqtt:
             }
 
     # ==========================================================
-    #  次卧灯  (巴法云 topic: cw_light004)
+    #  次卧灯  (巴法云 topic: cwlight004)
     # ==========================================================
-    - topic: "cw_light004/set"
+    - topic: "cwlight004/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "cw_light <- [%s]", x.c_str());
@@ -188,9 +188,9 @@ mqtt:
             }
 
     # ==========================================================
-    #  次卧风扇  (巴法云 topic: cw_fan005)
+    #  次卧风扇  (巴法云 topic: cwfan005)
     # ==========================================================
-    - topic: "cw_fan005/set"
+    - topic: "cwfan005/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "cw_fan <- [%s]", x.c_str());
@@ -233,7 +233,7 @@ esp32_ble_tracker:
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
                         bool on = (raw[i + 7] == 0x01);
-                        id(bemfa).publish("ct_light004/get", on ? "on" : "off");
+                        id(bemfa).publish("ctlight004/get", on ? "on" : "off");
                         break;
                     }
                 }
@@ -243,7 +243,7 @@ esp32_ble_tracker:
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
                         bool on = (raw[i + 7] == 0x01);
-                        id(bemfa).publish("cw_light004/get", on ? "on" : "off");
+                        id(bemfa).publish("cwlight004/get", on ? "on" : "off");
                         break;
                     }
                 }
