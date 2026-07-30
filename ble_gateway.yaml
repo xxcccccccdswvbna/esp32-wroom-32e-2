@@ -235,22 +235,19 @@ esp32_ble_tracker:
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
                         bool on = (raw[i + 7] == 0x01);
-                        // 🔥 亮度：单字节 raw[i+12]
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                        // 🔥 色温：单字节 raw[i+13] → 2700K~6500K
                         int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * ct_pct / 100;
-                        // 风扇
-                        uint8_t sb = raw[i + 14];
-                        bool fan_run = (sb == 0x13 || sb == 0x03);
-                        int fan_spd = fan_run ? (raw[i + 15] + 1) : 0;
+                        // 🔥 修正：风扇状态 raw[i+16]，档位 raw[i+17]
+                        uint8_t fs = raw[i + 16];
+                        bool fan_run = (fs != 0x10);
+                        int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
                         static uint32_t ct_last = 0;
-                        static int ct_lb = -1, ct_lc = -1;
-                        if (millis() - ct_last > 5000 || brt != ct_lb || ct_k != ct_lc) {
+                        static int ct_lb = -1, ct_lc = -1, ct_lf = -1;
+                        if (millis() - ct_last > 5000 || brt != ct_lb || ct_k != ct_lc || fan_spd != ct_lf) {
                             ct_last = millis();
-                            ct_lb = brt;
-                            ct_lc = ct_k;
+                            ct_lb = brt; ct_lc = ct_k; ct_lf = fan_spd;
                             ESP_LOGI("134D", "ct on=%d brt=%d%% ct=%dK fan=%d", on, brt, ct_k, fan_spd);
                             if (on)
                                 id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
@@ -270,16 +267,16 @@ esp32_ble_tracker:
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                         int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * ct_pct / 100;
-                        uint8_t sb = raw[i + 14];
-                        bool fan_run = (sb == 0x13 || sb == 0x03);
-                        int fan_spd = fan_run ? (raw[i + 15] + 1) : 0;
+                        // 🔥 修正：风扇状态 raw[i+16]，档位 raw[i+17]
+                        uint8_t fs = raw[i + 16];
+                        bool fan_run = (fs != 0x10);
+                        int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
                         static uint32_t cw_last = 0;
-                        static int cw_lb = -1, cw_lc = -1;
-                        if (millis() - cw_last > 5000 || brt != cw_lb || ct_k != cw_lc) {
+                        static int cw_lb = -1, cw_lc = -1, cw_lf = -1;
+                        if (millis() - cw_last > 5000 || brt != cw_lb || ct_k != cw_lc || fan_spd != cw_lf) {
                             cw_last = millis();
-                            cw_lb = brt;
-                            cw_lc = ct_k;
+                            cw_lb = brt; cw_lc = ct_k; cw_lf = fan_spd;
                             ESP_LOGI("134D", "cw on=%d brt=%d%% ct=%dK fan=%d", on, brt, ct_k, fan_spd);
                             if (on)
                                 id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
