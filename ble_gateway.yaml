@@ -230,100 +230,56 @@ esp32_ble_tracker:
                 auto &raw = data.data;
                 if (raw.size() < 20) continue;
 
-                // =====================================================
-                // 餐厅 134D
-                // =====================================================
+                // ===== 餐厅 134D =====
                 uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
+                        // 🔥 极简逻辑：已知字节位置，直接读取，不加任何多余判断
+                        bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                        int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
-                        int ct_k = 2700 + (6500 - 2700) * ct_pct / 100;
+                        int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
                         
-                        // 灯的状态判断
-                        bool light_on = (raw[i + 7] == 0x01) || (brt > 0);
-                        
-                        // 风扇的状态判断
-                        uint8_t fs = raw[i + 16];
-                        bool fan_run = (fs == 0x11 || fs == 0x13 || fs == 0x03 || (fs != 0x10 && fs != 0x00));
+                        bool fan_run = (raw[i + 16] != 0x10); // 0x10是关，其他是开
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                        // 🔥 【完全解耦 1】：灯独立判断、独立节流、独立上报
-                        static uint32_t ct_light_last = 0;
-                        static int ct_light_b = -1, ct_light_k = -1;
-                        static bool ct_light_o = false;
-                        if (millis() - ct_light_last > 3000 || brt != ct_light_b || ct_k != ct_light_k || light_on != ct_light_o) {
-                            ct_light_last = millis();
-                            ct_light_b = brt; ct_light_k = ct_k; ct_light_o = light_on;
-                            ESP_LOGI("134D", "ct LIGHT: on=%d brt=%d%% ct=%dK", light_on, brt, ct_k);
-                            if (light_on)
-                                id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
-                            else
-                                id(bemfa).publish("ctlight002/up", "off");
-                        }
-
-                        // 🔥 【完全解耦 2】：风扇独立判断、独立节流、独立上报
-                        static uint32_t ct_fan_last = 0;
-                        static int ct_fan_s = -1;
-                        static bool ct_fan_r = false;
-                        if (millis() - ct_fan_last > 3000 || fan_spd != ct_fan_s || fan_run != ct_fan_r) {
-                            ct_fan_last = millis();
-                            ct_fan_s = fan_spd; ct_fan_r = fan_run;
-                            ESP_LOGI("134D", "ct FAN: run=%d spd=%d (raw16=%02X)", fan_run, fan_spd, fs);
-                            if (fan_run) {
-                                id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
-                                id(bemfa).publish("ctfan003/up", "on"); // 双保险
-                            } else {
-                                id(bemfa).publish("ctfan003/up", "off");
-                            }
+                        // 极简节流：每3秒上报一次当前状态，防止日志和MQTT刷屏
+                        static uint32_t ct_last = 0;
+                        if (millis() - ct_last > 3000) {
+                            ct_last = millis();
+                            ESP_LOGI("134D", "ct L:%d B:%d C:%d F:%d S:%d", light_on, brt, ct_k, fan_run, fan_spd);
+                            
+                            // 直接上报，是开就报on，是关就报off
+                            if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+                            else id(bemfa).publish("ctlight002/up", "off");
+                            
+                            if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
+                            else id(bemfa).publish("ctfan003/up", "off");
                         }
                         break;
                     }
                 }
 
-                // =====================================================
-                // 次卧 134D
-                // =====================================================
+                // ===== 次卧 134D =====
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
+                        bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                        int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
-                        int ct_k = 2700 + (6500 - 2700) * ct_pct / 100;
+                        int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
                         
-                        bool light_on = (raw[i + 7] == 0x01) || (brt > 0);
-                        uint8_t fs = raw[i + 16];
-                        bool fan_run = (fs == 0x11 || fs == 0x13 || fs == 0x03 || (fs != 0x10 && fs != 0x00));
+                        bool fan_run = (raw[i + 16] != 0x10);
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                        // 🔥 【完全解耦 1】：灯独立上报
-                        static uint32_t cw_light_last = 0;
-                        static int cw_light_b = -1, cw_light_k = -1;
-                        static bool cw_light_o = false;
-                        if (millis() - cw_light_last > 3000 || brt != cw_light_b || ct_k != cw_light_k || light_on != cw_light_o) {
-                            cw_light_last = millis();
-                            cw_light_b = brt; cw_light_k = ct_k; cw_light_o = light_on;
-                            ESP_LOGI("134D", "cw LIGHT: on=%d brt=%d%% ct=%dK", light_on, brt, ct_k);
-                            if (light_on)
-                                id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
-                            else
-                                id(bemfa).publish("cwlight002/up", "off");
-                        }
-
-                        // 🔥 【完全解耦 2】：风扇独立上报
-                        static uint32_t cw_fan_last = 0;
-                        static int cw_fan_s = -1;
-                        static bool cw_fan_r = false;
-                        if (millis() - cw_fan_last > 3000 || fan_spd != cw_fan_s || fan_run != cw_fan_r) {
-                            cw_fan_last = millis();
-                            cw_fan_s = fan_spd; cw_fan_r = fan_run;
-                            ESP_LOGI("134D", "cw FAN: run=%d spd=%d (raw16=%02X)", fan_run, fan_spd, fs);
-                            if (fan_run) {
-                                id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
-                                id(bemfa).publish("cwfan003/up", "on");
-                            } else {
-                                id(bemfa).publish("cwfan003/up", "off");
-                            }
+                        static uint32_t cw_last = 0;
+                        if (millis() - cw_last > 3000) {
+                            cw_last = millis();
+                            ESP_LOGI("134D", "cw L:%d B:%d C:%d F:%d S:%d", light_on, brt, ct_k, fan_run, fan_spd);
+                            
+                            if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+                            else id(bemfa).publish("cwlight002/up", "off");
+                            
+                            if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
+                            else id(bemfa).publish("cwfan003/up", "off");
                         }
                         break;
                     }
