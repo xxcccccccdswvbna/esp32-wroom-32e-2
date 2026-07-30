@@ -236,3 +236,62 @@ esp32_ble_tracker:
                     }
                 }
             }
+# ===================== 系统状态传感器 =====================
+sensor:
+  # 运行时间
+  - platform: uptime
+    name: "Gateway Uptime"
+    id: gateway_uptime
+    update_interval: 60s
+
+  # 芯片温度
+  - platform: internal_temperature
+    name: "ESP32 Chip Temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+
+  # WiFi 信号强度 (dBm)
+  - platform: wifi_signal
+    name: "WiFi Signal dBm"
+    id: wifi_signal_db
+    update_interval: 60s
+
+  # WiFi 信号强度 (百分比转换)
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:wifi-strength-4
+binary_sensor:
+  # MQTT 连接状态
+  - platform: mqtt_subscribe
+    name: "MQTT Connected"
+    topic: "tele/ble-gw/LWT"
+    payload_on: "Online"
+    payload_off: "Offline"
+    device_class: connectivity    
+
+# ===================== 文本传感器 =====================
+text_sensor:
+  # WiFi 信息
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP Address"
+    ssid:
+      name: "ESP Connected SSID"
+    bssid:
+      name: "ESP Connected BSSID"
+    mac_address:
+      name: "ESP MAC Address"
+
+# ===================== 按钮 =====================
+button:
+  # 重启按钮
+  - platform: restart
+    name: "Restart Gateway"
+    icon: mdi:restart
+    
