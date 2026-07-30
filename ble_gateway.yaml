@@ -266,14 +266,13 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 0
     icon: mdi:wifi-strength-4
+
+# ===================== 二进制传感器 =====================
 binary_sensor:
-  # MQTT 连接状态
-  - platform: mqtt_subscribe
-    name: "MQTT Connected"
-    topic: "tele/ble-gw/LWT"
-    payload_on: "Online"
-    payload_off: "Offline"
-    device_class: connectivity    
+  # 设备在线状态（ESPHome 原生）
+  - platform: status
+    name: "Gateway Status"
+    device_class: connectivity
 
 # ===================== 文本传感器 =====================
 text_sensor:
@@ -294,4 +293,3 @@ button:
   - platform: restart
     name: "Restart Gateway"
     icon: mdi:restart
-    
