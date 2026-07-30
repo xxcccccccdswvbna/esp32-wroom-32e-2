@@ -62,7 +62,7 @@ mqtt:
   id: bemfa
   broker: bemfa.com
   port: 9501
-  username: "你的巴法云UID"    # ← 改这里
+  username: "97109945d7e24559b3e4ca7a1f8ef160" 
   password: ""
   client_id: "ble_gw_01"
   discovery: false
