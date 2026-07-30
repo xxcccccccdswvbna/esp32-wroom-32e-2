@@ -230,41 +230,53 @@ esp32_ble_tracker:
                 auto &raw = data.data;
                 if (raw.size() < 20) continue;
 
-                // ===== 餐厅 =====
+                // ===== 餐厅 (134D) =====
                 uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                        bool on = (raw[i + 7] == 0x01);
-                        int brt = raw[i + 11];  // 🔥 亮度百分比，直接读
+                        // 🔥 原来的解析，原封不动
+                        bool power_on = (raw[i + 7] == 0x01);
+                        uint16_t brt_raw = (raw[i + 12] << 8) | raw[i + 13];
+                        int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+                        uint8_t state_byte = raw[i + 14];
+                        bool fan_running = (state_byte == 0x13 || state_byte == 0x03);
+                        uint8_t fan_gear = raw[i + 15];
+                        int fan_speed = fan_running ? (fan_gear + 1) : 0;
 
-                        static int ct_last = -1;
-                        if (brt != ct_last || on != (ct_last >= 0)) {
-                            ct_last = on ? brt : -1;
-                            ESP_LOGW("BLE", "ct on=%d brt=%d%%", on, brt);
-                            if (on)
-                                id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt));
+                        // 节流：每 5 秒上报一次
+                        static uint32_t ct_last = 0;
+                        if (millis() - ct_last > 5000) {
+                            ct_last = millis();
+                            if (power_on)
+                                id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt_pct));
                             else
                                 id(bemfa).publish("ctlight002/up", "off");
+                            id(bemfa).publish("ctfan003/up", fan_running ? "on#" + std::to_string(fan_speed) : "off");
                         }
                         break;
                     }
                 }
 
-                // ===== 次卧 =====
+                // ===== 次卧 (134D) =====
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
-                        bool on = (raw[i + 7] == 0x01);
-                        int brt = raw[i + 11];
+                        bool power_on = (raw[i + 7] == 0x01);
+                        uint16_t brt_raw = (raw[i + 12] << 8) | raw[i + 13];
+                        int brt_pct = (brt_raw == 0xFFFF) ? 100 : (int)(brt_raw / 655.35);
+                        uint8_t state_byte = raw[i + 14];
+                        bool fan_running = (state_byte == 0x13 || state_byte == 0x03);
+                        uint8_t fan_gear = raw[i + 15];
+                        int fan_speed = fan_running ? (fan_gear + 1) : 0;
 
-                        static int cw_last = -1;
-                        if (brt != cw_last || on != (cw_last >= 0)) {
-                            cw_last = on ? brt : -1;
-                            ESP_LOGW("BLE", "cw on=%d brt=%d%%", on, brt);
-                            if (on)
-                                id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt));
+                        static uint32_t cw_last = 0;
+                        if (millis() - cw_last > 5000) {
+                            cw_last = millis();
+                            if (power_on)
+                                id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt_pct));
                             else
                                 id(bemfa).publish("cwlight002/up", "off");
+                            id(bemfa).publish("cwfan003/up", fan_running ? "on#" + std::to_string(fan_speed) : "off");
                         }
                         break;
                     }
