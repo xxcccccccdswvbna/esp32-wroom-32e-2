@@ -8,12 +8,15 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
+      # 🔥 必须保留：开启蓝牙和 BLE 功能的底层开关
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 
+# 🔥 优化 1：关闭串口日志输出 (baud_rate: 0)，节省资源，保持设备静默运行
+# 如需排查问题，可通过 Home Assistant 或网页查看日志
 logger:
-  baud_rate: 115200
-  level: DEBUG
+  baud_rate: 0
+  level: INFO
 
 wifi:
   ssid: "CC"
@@ -21,12 +24,15 @@ wifi:
   fast_connect: true
   power_save_mode: none
   ap:
-    ssid: "BLE-GW"
+    ssid: "BLE-GW Fallback"
     password: "12345678"
 
 captive_portal:
+
+# 🔥 优化 2：开启 Web 服务器，支持网页访问和 OTA 固件更新
 web_server:
   port: 80
+
 ota:
   - platform: esphome
 
@@ -48,7 +54,7 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云直连（修正版）=====================
+# ===================== 巴法云直连 =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -63,75 +69,42 @@ mqtt:
   on_message:
 
     # ==========================================================
-    #  餐厅灯  (ctlight002)
-    #  巴法云格式: on / off / on#50(亮度) 
+    #  餐厅灯 (ctlight002)
     # ==========================================================
     - topic: "ctlight002"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "ctlight <- [%s]", x.c_str());
-
-            if (x == "on") {
-                id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
-            }
-            else if (x == "off") {
-                id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
-            }
+            if (x == "on") id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
+            else if (x == "off") id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
             else if (x.find("on#") == 0) {
                 std::string rest = x.substr(3);
                 int v = atoi(rest.c_str());
-
-                // 色温（有才发，没有就跳过）
                 size_t p2 = rest.find('#');
                 if (p2 != std::string::npos) {
                     int k = atoi(rest.substr(p2 + 1).c_str());
-                    ESP_LOGW("CMD", "ctlight color=%dK bright=%d", k, v);
-                    if (k <= 3100)
-                        id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
-                    else if (k <= 5000)
-                        id(tx).send_hex("0201021BFF114D191248802770000001B9491DDDF080809727277070005F1A|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
-                    else
-                        id(tx).send_hex("0201021BFF114D1917488027700000018181C2D8277070005FC86FB84848F0|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
-                } else {
-                    ESP_LOGW("CMD", "ctlight bright=%d", v);
+                    if (k <= 3100) id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
+                    else if (k <= 5000) id(tx).send_hex("0201021BFF114D191248802770000001B9491DDDF080809727277070005F1A|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
+                    else id(tx).send_hex("0201021BFF114D1917488027700000018181C2D8277070005FC86FB84848F0|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
                 }
-
-                // 亮度（始终发）
-                if (v <= 10)
-                    id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
-                else if (v <= 30)
-                    id(tx).send_hex("0201021BFF114D19144880277000000149A6A1B3809727277070005FC86F3F|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
-                else if (v <= 45)
-                    id(tx).send_hex("0201021BFF114D191B48802770000001267121665FC86FB84848A7F080802D|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
-                else if (v <= 55)
-                    id(tx).send_hex("0201021BFF114D191248802770000001B94919D8F080809727277070005F1B|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
-                else if (v <= 70)
-                    id(tx).send_hex("0201021BFF114D191948802770000001962676E970005FC86FB84848A7F06D|0201021BFF114D1913488027700000014948A7F080809727277070005FC86D");
-                else if (v <= 90)
-                    id(tx).send_hex("0201021BFF114D1913488027700000014949F63C80809727277070005FC84F|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
-                else
-                    id(tx).send_hex("0201021BFF114D191B48802770000001267121FF5FC86FB84848A7F08080C4|0201021BFF114D191E48802770000001015FC86FB84848A7F0808097272772");
+                if (v <= 10) id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
+                else if (v <= 30) id(tx).send_hex("0201021BFF114D19144880277000000149A6A1B3809727277070005FC86F3F|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
+                else if (v <= 45) id(tx).send_hex("0201021BFF114D191B48802770000001267121665FC86FB84848A7F080802D|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
+                else if (v <= 55) id(tx).send_hex("0201021BFF114D191248802770000001B94919D8F080809727277070005F1B|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
+                else if (v <= 70) id(tx).send_hex("0201021BFF114D191948802770000001962676E970005FC86FB84848A7F06D|0201021BFF114D1913488027700000014948A7F080809727277070005FC86D");
+                else if (v <= 90) id(tx).send_hex("0201021BFF114D1913488027700000014949F63C80809727277070005FC84F|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
+                else id(tx).send_hex("0201021BFF114D191B48802770000001267121FF5FC86FB84848A7F08080C4|0201021BFF114D191E48802770000001015FC86FB84848A7F0808097272772");
             }
 
-
     # ==========================================================
-    #  餐厅风扇  (ctfan003)
-    #  巴法云格式: on / off / on#1~on#6(风速)
+    #  餐厅风扇 (ctfan003)
     # ==========================================================
     - topic: "ctfan003"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "ctfan <- [%s]", x.c_str());
-
-            if (x == "on") {
-                id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
-            }
-            else if (x == "off") {
-                id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
-            }
+            if (x == "on") id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
+            else if (x == "off") id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
             else if (x.find("on#") == 0) {
                 int s = atoi(x.substr(3).c_str());
-                ESP_LOGW("CMD", "ctfan speed=%d", s);
                 switch (s) {
                     case 1: id(tx).send_hex("0201021BFF114D191A4880277000000126276970005FC86FB84848A7F0809B|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5"); break;
                     case 2: id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A"); break;
@@ -143,70 +116,42 @@ mqtt:
             }
 
     # ==========================================================
-    #  次卧灯  (cwlight002)
+    #  次卧灯 (cwlight002)
     # ==========================================================
     - topic: "cwlight002"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "cwlight <- [%s]", x.c_str());
-
-            if (x == "on") {
-                id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-            }
-            else if (x == "off") {
-                id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-            }
+            if (x == "on") id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
+            else if (x == "off") id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
             else if (x.find("on#") == 0) {
                 std::string rest = x.substr(3);
                 int v = atoi(rest.c_str());
-
                 size_t p2 = rest.find('#');
                 if (p2 != std::string::npos) {
                     int k = atoi(rest.substr(p2 + 1).c_str());
-                    ESP_LOGW("CMD", "cwlight color=%dK bright=%d", k, v);
-                    if (k <= 3100)
-                        id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2C2570005CBF1D60F0F0FC3FCF97|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
-                    else if (k <= 5000)
-                        id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5893FCFCF9D2D2D7070005C72|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
-                    else
-                        id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5033FCFCF9D2D2D7070005CE8|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-                } else {
-                    ESP_LOGW("CMD", "cwlight bright=%d", v);
+                    if (k <= 3100) id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2C2570005CBF1D60F0F0FC3FCF97|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
+                    else if (k <= 5000) id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5893FCFCF9D2D2D7070005C72|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
+                    else id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5033FCFCF9D2D2D7070005CE8|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
                 }
-
-                if (v <= 10)
-                    id(tx).send_hex("0201021BFF114D191DF0CF2D7000000171010DBD1D60F0F0FC3FCFCF9D2D7B|0201021BFF114D191EF0CF2D70000001015CBF1D60F0F0FC3FCFCF9D2D2D72");
-                else if (v <= 30)
-                    id(tx).send_hex("0201021BFF114D191CF0CF2D7000000171715169BF1D60F0F0FC3FCFCF9DA4|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
-                else if (v <= 45)
-                    id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7121685CBF1D60F0F0FC3FCFCF21|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
-                else if (v <= 55)
-                    id(tx).send_hex("0201021BFF114D1910F0CF2D70000001BE1C318FF0FC3FCFCF9D2D2D7070D3|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
-                else if (v <= 70)
-                    id(tx).send_hex("0201021BFF114D191EF0CF2D70000001015DEE8B60F0F0FC3FCFCF9D2D2D9A|0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002");
-                else if (v <= 90)
-                    id(tx).send_hex("0201021BFF114D1913F0CF2D70000001F1F1ADF6CFCF9D2D2D7070005CBF00|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
-                else
-                    id(tx).send_hex("0201021BFF114D191FF0CF2D700000015DBE4C9FF0F0FC3FCFCF9D2D2D7023|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
+                if (v <= 10) id(tx).send_hex("0201021BFF114D191DF0CF2D7000000171010DBD1D60F0F0FC3FCFCF9D2D7B|0201021BFF114D191EF0CF2D70000001015CBF1D60F0F0FC3FCFCF9D2D2D72");
+                else if (v <= 30) id(tx).send_hex("0201021BFF114D191CF0CF2D7000000171715169BF1D60F0F0FC3FCFCF9DA4|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
+                else if (v <= 45) id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7121685CBF1D60F0F0FC3FCFCF21|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
+                else if (v <= 55) id(tx).send_hex("0201021BFF114D1910F0CF2D70000001BE1C318FF0FC3FCFCF9D2D2D7070D3|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
+                else if (v <= 70) id(tx).send_hex("0201021BFF114D191EF0CF2D70000001015DEE8B60F0F0FC3FCFCF9D2D2D9A|0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002");
+                else if (v <= 90) id(tx).send_hex("0201021BFF114D1913F0CF2D70000001F1F1ADF6CFCF9D2D2D7070005CBF00|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
+                else id(tx).send_hex("0201021BFF114D191FF0CF2D700000015DBE4C9FF0F0FC3FCFCF9D2D2D7023|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
             }
 
     # ==========================================================
-    #  次卧风扇  (cwfan003)
+    #  次卧风扇 (cwfan003)
     # ==========================================================
     - topic: "cwfan003"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "cwfan <- [%s]", x.c_str());
-
-            if (x == "on") {
-                id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
-            }
-            else if (x == "off") {
-                id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
-            }
+            if (x == "on") id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
+            else if (x == "off") id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
             else if (x.find("on#") == 0) {
                 int s = atoi(x.substr(3).c_str());
-                ESP_LOGW("CMD", "cwfan speed=%d", s);
                 switch (s) {
                     case 1: id(tx).send_hex("0201021BFF114D1913F0CF2D70000001F1F0E53FCFCF9D2D2D7070005CBF06|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2"); break;
                     case 2: id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2"); break;
@@ -216,6 +161,7 @@ mqtt:
                     case 6: id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE"); break;
                 }
             }
+
 # ===================== 状态监听 → 上报巴法云 =====================
 esp32_ble_tracker:
   scan_parameters:
@@ -234,12 +180,9 @@ esp32_ble_tracker:
                 uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                        // 【灯：保持你验证完全OK的逻辑】
                         bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-
-                        // 【风扇：采用你提供的位运算逻辑，完美区分 0x10(关) 和 0x11(开)】
                         uint8_t fan_state = raw[i + 16];
                         bool fan_run = (fan_state & 0x01) != 0; 
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
@@ -247,14 +190,8 @@ esp32_ble_tracker:
                         static uint32_t ct_last = 0;
                         if (millis() - ct_last > 3000) {
                             ct_last = millis();
-                            // 增加 raw16 的十六进制打印，彻底看清风扇状态字节
-                            ESP_LOGI("134D", "ct L:%d B:%d C:%d F:%d S:%d (raw16:%02X)", light_on, brt, ct_k, fan_run, fan_spd, fan_state);
-                            
-                            // 灯上报
                             if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("ctlight002/up", "off");
-                            
-                            // 风扇上报
                             if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("ctfan003/up", "off");
                         }
@@ -266,12 +203,9 @@ esp32_ble_tracker:
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
-                        // 【灯：保持你验证完全OK的逻辑】
                         bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-
-                        // 【风扇：采用位运算逻辑】
                         uint8_t fan_state = raw[i + 16];
                         bool fan_run = (fan_state & 0x01) != 0;
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
@@ -279,13 +213,8 @@ esp32_ble_tracker:
                         static uint32_t cw_last = 0;
                         if (millis() - cw_last > 3000) {
                             cw_last = millis();
-                            ESP_LOGI("134D", "cw L:%d B:%d C:%d F:%d S:%d (raw16:%02X)", light_on, brt, ct_k, fan_run, fan_spd, fan_state);
-                            
-                            // 灯上报
                             if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("cwlight002/up", "off");
-                            
-                            // 风扇上报
                             if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("cwfan003/up", "off");
                         }
