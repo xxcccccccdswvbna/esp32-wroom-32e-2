@@ -1,13 +1,13 @@
 # ===================== 项目配置 =====================
 substitutions:
   project_name: "BLE Gateway"
-  # 🔥 不再需要手动维护版本号，编译时自动生成
+  # 🔥 占位符：编译时会被 GitHub Actions 自动替换为真实时间
+  build_time: "Unknown" 
 
 esphome:
   name: ble-gw
   friendly_name: "${project_name}"
-  # 🔥 编译时自动注入版本信息到固件元数据
-  comment: "${project_name} - Build: ${__DATE__} ${__TIME__}"
+  comment: "${project_name} - Build: ${build_time}"
 
 esp32:
   board: esp32dev
@@ -270,21 +270,18 @@ binary_sensor:
     device_class: connectivity
 
 text_sensor:
-  # 🔥 自动获取编译时间（每次编译自动更新）
+  # 🔥 显示注入的真实编译时间
   - platform: template
     name: "Build Timestamp"
-    id: build_timestamp
     lambda: |-
-      return {"${__DATE__} ${__TIME__}"};
+      return {"${build_time}"};
     icon: mdi:calendar-clock
     update_interval: 60s
 
-  # 🔥 ESPHome 框架版本
   - platform: version
     name: "ESPHome Version"
     hide_timestamp: true
 
-  # WiFi 信息
   - platform: wifi_info
     ip_address:
       name: "ESP IP Address"
@@ -294,7 +291,6 @@ text_sensor:
       name: "ESP Connected BSSID"
     mac_address:
       name: "ESP MAC Address"
-
 button:
   - platform: restart
     name: "Restart Gateway"
