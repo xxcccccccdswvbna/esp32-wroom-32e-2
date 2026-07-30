@@ -1,6 +1,13 @@
+# ===================== 项目配置 =====================
+substitutions:
+  project_name: "BLE Gateway"
+  # 🔥 不再需要手动维护版本号，编译时自动生成
+
 esphome:
   name: ble-gw
-  friendly_name: "BLE Gateway"
+  friendly_name: "${project_name}"
+  # 🔥 编译时自动注入版本信息到固件元数据
+  comment: "${project_name} - Build: ${__DATE__} ${__TIME__}"
 
 esp32:
   board: esp32dev
@@ -8,12 +15,9 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      # 🔥 必须保留：开启蓝牙和 BLE 功能的底层开关
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 
-# 🔥 优化 1：关闭串口日志输出 (baud_rate: 0)，节省资源，保持设备静默运行
-# 如需排查问题，可通过 Home Assistant 或网页查看日志
 logger:
   baud_rate: 0
   level: INFO
@@ -28,11 +32,8 @@ wifi:
     password: "12345678"
 
 captive_portal:
-
-# 🔥 优化 2：开启 Web 服务器，支持网页访问和 OTA 固件更新
 web_server:
   port: 80
-
 ota:
   - platform: esphome
 
@@ -238,26 +239,22 @@ esp32_ble_tracker:
             }
 # ===================== 系统状态传感器 =====================
 sensor:
-  # 运行时间
   - platform: uptime
     name: "Gateway Uptime"
     id: gateway_uptime
     update_interval: 60s
 
-  # 芯片温度
   - platform: internal_temperature
     name: "ESP32 Chip Temperature"
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     update_interval: 60s
 
-  # WiFi 信号强度 (dBm)
   - platform: wifi_signal
     name: "WiFi Signal dBm"
     id: wifi_signal_db
     update_interval: 60s
 
-  # WiFi 信号强度 (百分比转换)
   - platform: copy
     source_id: wifi_signal_db
     name: "WiFi Signal Percent"
@@ -267,15 +264,26 @@ sensor:
     accuracy_decimals: 0
     icon: mdi:wifi-strength-4
 
-# ===================== 二进制传感器 =====================
 binary_sensor:
-  # 设备在线状态（ESPHome 原生）
   - platform: status
     name: "Gateway Status"
     device_class: connectivity
 
-# ===================== 文本传感器 =====================
 text_sensor:
+  # 🔥 自动获取编译时间（每次编译自动更新）
+  - platform: template
+    name: "Build Timestamp"
+    id: build_timestamp
+    lambda: |-
+      return {"${__DATE__} ${__TIME__}"};
+    icon: mdi:calendar-clock
+    update_interval: 60s
+
+  # 🔥 ESPHome 框架版本
+  - platform: version
+    name: "ESPHome Version"
+    hide_timestamp: true
+
   # WiFi 信息
   - platform: wifi_info
     ip_address:
@@ -287,9 +295,7 @@ text_sensor:
     mac_address:
       name: "ESP MAC Address"
 
-# ===================== 按钮 =====================
 button:
-  # 重启按钮
   - platform: restart
     name: "Restart Gateway"
     icon: mdi:restart
