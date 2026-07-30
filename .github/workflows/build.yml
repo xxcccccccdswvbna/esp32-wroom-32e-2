@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# 🔥 修复 403 错误：显式授予写入仓库内容的权限
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,17 +21,29 @@ jobs:
 
       - run: pip install esphome
 
-      # 🔥 生成版本标签（格式：v2024.0116.1423）
+      # 🔥 生成时间戳并注入到 YAML 文件中
+      - name: Inject Build Timestamp
+        run: |
+          # 生成格式化的时间，例如: 2026-07-30 23:37:00
+          BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')
+          echo "Build time will be: $BUILD_TIME"
+          
+          # 使用 sed 替换 YAML 中的占位符
+          sed -i "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml
+          
+          # 验证替换是否成功
+          grep "build_time:" ble_gateway.yaml
+
+      - run: esphome compile ble_gateway.yaml
+
+      # 🔥 生成版本标签（格式：v2026.0730.2337）
       - name: Generate version tag
         id: version
         run: |
-          # 使用日期时间作为版本号
           VERSION="v$(date +'%Y.%m%d.%H%M')"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
-
-      - run: esphome compile ble_gateway.yaml
 
       # 🔥 收集并重命名固件
       - name: Collect and rename firmware
@@ -35,18 +51,15 @@ jobs:
           mkdir -p out
           VERSION="${{ steps.version.outputs.version }}"
           
-          # 复制并重命名固件文件
           cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-${VERSION}.bin
           cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-${VERSION}.factory.bin 2>/dev/null || true
           
-          # 同时保留 latest 版本（方便下载）
+          # 保留 latest 版本
           cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-latest.bin
           cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-latest.factory.bin 2>/dev/null || true
           
-          echo "Firmware files:"
           ls -lh out/
 
-      # 🔥 上传为 artifact（保留）
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
@@ -66,24 +79,8 @@ jobs:
             **Commit**: `${{ github.sha }}`
             
             ### 📦 固件文件
-            
             - `ble-gw-${{ steps.version.outputs.version }}.bin` - OTA 升级固件
-            - `ble-gw-${{ steps.version.outputs.version }}.factory.bin` - 首次烧录固件（完整固件）
             - `ble-gw-latest.bin` - 最新版本（始终指向最新构建）
-            
-            ### 📝 更新内容
-            
-            查看 [提交记录](https://github.com/${{ github.repository }}/commits/${{ github.sha }})
-            
-            ### 🔧 升级方法
-            
-            **OTA 升级**（推荐）:
-            1. 打开 ESPHome Web 界面：`http://<设备IP>`
-            2. 点击 "Choose File" 选择 `ble-gw-latest.bin`
-            3. 点击 "Update" 开始升级
-            
-            **首次烧录**:
-            使用 `ble-gw-latest.factory.bin` 通过 USB 烧录
           draft: false
           prerelease: false
           files: |
