@@ -1,9 +1,6 @@
 # ============================================================
-#  BLE 网关 - 巴法云直连版
-#  修改说明：
-#    1. 把 BEMFA_UID 换成你的巴法云 UID
-#    2. 把 WIFI 换成你的 WiFi
-#    3. 新增设备：复制一段 on_message + tracker 即可
+#  BLE 网关 - 巴法云直连版 (修正版)
+#  巴法云后缀: 002=灯泡  003=风扇  006=开关
 # ============================================================
 
 esphome:
@@ -33,7 +30,7 @@ wifi:
     password: "12345678"
 
 captive_portal:
-
+web_server:
 ota:
   - platform: esphome
 
@@ -62,22 +59,25 @@ mqtt:
   id: bemfa
   broker: bemfa.com
   port: 9501
-  username: "97109945d7e24559b3e4ca7a1f8ef160" 
+  username: "97109945d7e24559b3e4ca7a1f8ef160"
   password: ""
-  client_id: "ble_gw_01"
+  client_id: "blegw01"
+  clean_session: true
   discovery: false
   birth_message:
   will_message:
+  log_topic:
+  topic_prefix: ""
   keepalive: 60s
   on_message:
 
     # ==========================================================
-    #  餐厅灯  (巴法云 topic: ctlight004)
+    #  餐厅灯  (巴法云 topic: ctlight002  后缀002=灯泡)
     # ==========================================================
-    - topic: "ctlight004/set"
+    - topic: "ctlight002/set"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "ct_light <- [%s]", x.c_str());
+            ESP_LOGW("CMD", "ctlight <- [%s]", x.c_str());
 
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
@@ -117,12 +117,12 @@ mqtt:
             }
 
     # ==========================================================
-    #  餐厅风扇  (巴法云 topic: ctfan005)
+    #  餐厅风扇  (巴法云 topic: ctfan003  后缀003=风扇)
     # ==========================================================
-    - topic: "ctfan005/set"
+    - topic: "ctfan003/set"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "ct_fan <- [%s]", x.c_str());
+            ESP_LOGW("CMD", "ctfan <- [%s]", x.c_str());
 
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
@@ -145,12 +145,12 @@ mqtt:
             }
 
     # ==========================================================
-    #  次卧灯  (巴法云 topic: cwlight004)
+    #  次卧灯  (巴法云 topic: cwlight002)
     # ==========================================================
-    - topic: "cwlight004/set"
+    - topic: "cwlight002/set"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "cw_light <- [%s]", x.c_str());
+            ESP_LOGW("CMD", "cwlight <- [%s]", x.c_str());
 
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
@@ -188,12 +188,12 @@ mqtt:
             }
 
     # ==========================================================
-    #  次卧风扇  (巴法云 topic: cwfan005)
+    #  次卧风扇  (巴法云 topic: cwfan003)
     # ==========================================================
-    - topic: "cwfan005/set"
+    - topic: "cwfan003/set"
       then:
         - lambda: |-
-            ESP_LOGW("CMD", "cw_fan <- [%s]", x.c_str());
+            ESP_LOGW("CMD", "cwfan <- [%s]", x.c_str());
 
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
@@ -228,22 +228,22 @@ esp32_ble_tracker:
                 auto &raw = data.data;
                 if (raw.size() < 20) continue;
 
-                // ===== 134D 协议：餐厅 (MAC: 00:00:70:27:80:48) =====
+                // 餐厅 (MAC: 00:00:70:27:80:48)
                 uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
                         bool on = (raw[i + 7] == 0x01);
-                        id(bemfa).publish("ctlight004/get", on ? "on" : "off");
+                        id(bemfa).publish("ctlight002/get", on ? "on" : "off");
                         break;
                     }
                 }
 
-                // ===== 134D 协议：次卧 (MAC: 00:00:70:2d:cf:f0) =====
+                // 次卧 (MAC: 00:00:70:2d:cf:f0)
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
                         bool on = (raw[i + 7] == 0x01);
-                        id(bemfa).publish("cwlight004/get", on ? "on" : "off");
+                        id(bemfa).publish("cwlight002/get", on ? "on" : "off");
                         break;
                     }
                 }
