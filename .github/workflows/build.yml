@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install esphome
+      - run: esphome compile ble_gateway.yaml
+      - name: Collect firmware
+        run: |
+          mkdir -p out
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw.bin
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw.factory.bin 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/
