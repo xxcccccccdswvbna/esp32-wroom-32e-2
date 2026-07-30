@@ -62,23 +62,16 @@ mqtt:
   username: "97109945d7e24559b3e4ca7a1f8ef160"
   password: ""
   client_id: "blegw01"
-  clean_session: true
   discovery: false
   birth_message:
   will_message:
-  log_topic:
-  topic_prefix: ""
   keepalive: 60s
   on_message:
 
-    # ==========================================================
-    #  餐厅灯  (巴法云 topic: ctlight002  后缀002=灯泡)
-    # ==========================================================
     - topic: "ctlight002/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "ctlight <- [%s]", x.c_str());
-
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
             }
@@ -88,7 +81,6 @@ mqtt:
             else if (x.find("brightness") != std::string::npos) {
                 int v = 100;
                 for (int i = x.length()-1; i >= 0; i--) { if (isdigit(x[i])) { v = atoi(x.substr(i).c_str()); break; } }
-                ESP_LOGW("CMD", "brightness=%d", v);
                 if (v <= 10)
                     id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
                 else if (v <= 30)
@@ -107,7 +99,6 @@ mqtt:
             else if (x.find("color") != std::string::npos) {
                 int k = 6500;
                 for (int i = x.length()-1; i >= 0; i--) { if (isdigit(x[i])) { k = atoi(x.substr(i).c_str()); break; } }
-                ESP_LOGW("CMD", "colorTemp=%dK", k);
                 if (k <= 3100)
                     id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
                 else if (k <= 5000)
@@ -116,14 +107,10 @@ mqtt:
                     id(tx).send_hex("0201021BFF114D1917488027700000018181C2D8277070005FC86FB84848F0|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
             }
 
-    # ==========================================================
-    #  餐厅风扇  (巴法云 topic: ctfan003  后缀003=风扇)
-    # ==========================================================
     - topic: "ctfan003/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "ctfan <- [%s]", x.c_str());
-
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
             }
@@ -133,7 +120,6 @@ mqtt:
             else if (x.find("fanSpeed") != std::string::npos || x.find("speed") != std::string::npos) {
                 int s = 1;
                 for (int i = x.length()-1; i >= 0; i--) { if (isdigit(x[i])) { s = atoi(x.substr(i).c_str()); break; } }
-                ESP_LOGW("CMD", "fanSpeed=%d", s);
                 switch (s) {
                     case 1: id(tx).send_hex("0201021BFF114D191A4880277000000126276970005FC86FB84848A7F0809B|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5"); break;
                     case 2: id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A"); break;
@@ -144,14 +130,10 @@ mqtt:
                 }
             }
 
-    # ==========================================================
-    #  次卧灯  (巴法云 topic: cwlight002)
-    # ==========================================================
     - topic: "cwlight002/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "cwlight <- [%s]", x.c_str());
-
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
             }
@@ -187,14 +169,10 @@ mqtt:
                     id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5033FCFCF9D2D2D7070005CE8|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
             }
 
-    # ==========================================================
-    #  次卧风扇  (巴法云 topic: cwfan003)
-    # ==========================================================
     - topic: "cwfan003/set"
       then:
         - lambda: |-
             ESP_LOGW("CMD", "cwfan <- [%s]", x.c_str());
-
             if (x == "on" || x == "open") {
                 id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
             }
@@ -213,7 +191,6 @@ mqtt:
                     default: id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE"); break;
                 }
             }
-
 # ===================== 状态监听 → 上报巴法云 =====================
 esp32_ble_tracker:
   scan_parameters:
