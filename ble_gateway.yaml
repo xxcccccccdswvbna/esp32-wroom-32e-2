@@ -234,24 +234,26 @@ esp32_ble_tracker:
                 uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                        // 🔥 极简逻辑：已知字节位置，直接读取，不加任何多余判断
+                        // 【灯：完全保持你验证OK的逻辑不动】
                         bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                        
-                        bool fan_run = (raw[i + 16] != 0x10); // 0x10是关，其他是开
+
+                        // 【风扇：只改这里，回归最简单的 0x11 判断】
+                        // 抓包数据明确：0x11是开，0x10是关
+                        bool fan_run = (raw[i + 16] == 0x11); 
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                        // 极简节流：每3秒上报一次当前状态，防止日志和MQTT刷屏
                         static uint32_t ct_last = 0;
                         if (millis() - ct_last > 3000) {
                             ct_last = millis();
                             ESP_LOGI("134D", "ct L:%d B:%d C:%d F:%d S:%d", light_on, brt, ct_k, fan_run, fan_spd);
                             
-                            // 直接上报，是开就报on，是关就报off
+                            // 灯上报（不动）
                             if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("ctlight002/up", "off");
                             
+                            // 风扇上报
                             if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("ctfan003/up", "off");
                         }
@@ -263,11 +265,13 @@ esp32_ble_tracker:
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
+                        // 【灯：完全保持不动】
                         bool light_on = (raw[i + 7] == 0x01);
                         int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                         int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                        
-                        bool fan_run = (raw[i + 16] != 0x10);
+
+                        // 【风扇：只改这里】
+                        bool fan_run = (raw[i + 16] == 0x11);
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
                         static uint32_t cw_last = 0;
@@ -275,9 +279,11 @@ esp32_ble_tracker:
                             cw_last = millis();
                             ESP_LOGI("134D", "cw L:%d B:%d C:%d F:%d S:%d", light_on, brt, ct_k, fan_run, fan_spd);
                             
+                            // 灯上报（不动）
                             if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("cwlight002/up", "off");
                             
+                            // 风扇上报
                             if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("cwfan003/up", "off");
                         }
