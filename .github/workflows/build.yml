@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ dan ]
+    branches: [ main, dan ]  # 🔥 监听两个分支的推送
   workflow_dispatch:
 
 # 🔥 修复 403 错误：显式授予写入仓库内容的权限
@@ -24,40 +24,39 @@ jobs:
       # 🔥 生成时间戳并注入到 YAML 文件中
       - name: Inject Build Timestamp
         run: |
-          # 生成格式化的时间，例如: 2026-07-30 23:37:00
           BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')
           echo "Build time will be: $BUILD_TIME"
-          
-          # 使用 sed 替换 YAML 中的占位符
           sed -i "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml
-          
-          # 验证替换是否成功
           grep "build_time:" ble_gateway.yaml
 
       - run: esphome compile ble_gateway.yaml
 
-      # 🔥 生成版本标签（格式：v2026.0730.2337）
+      # 🔥 生成版本标签（格式：v2026.0730.2337-main 或 v2026.0730.2337-dan）
       - name: Generate version tag
         id: version
         run: |
-          VERSION="v$(date +'%Y.%m%d.%H%M')"
+          BRANCH="${{ github.ref_name }}"
+          VERSION="v$(date +'%Y.%m%d.%H%M')-${BRANCH}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version: $VERSION"
+          echo "Generated version for branch '$BRANCH': $VERSION"
 
-      # 🔥 收集并重命名固件
+      # 🔥 收集并重命名固件（文件名中强制包含分支名）
       - name: Collect and rename firmware
         run: |
           mkdir -p out
+          BRANCH="${{ github.ref_name }}"
           VERSION="${{ steps.version.outputs.version }}"
           
-          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-${VERSION}.bin
-          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-${VERSION}.factory.bin 2>/dev/null || true
+          # 带版本号和分支名的固件
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-${BRANCH}-${VERSION}.bin
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-${BRANCH}-${VERSION}.factory.bin 2>/dev/null || true
           
-          # 保留 latest 版本
-          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-latest.bin
-          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-latest.factory.bin 2>/dev/null || true
+          # 带分支名的 latest 固件（方便直接下载该分支最新版）
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.bin out/ble-gw-${BRANCH}-latest.bin
+          cp .esphome/build/ble-gw/.pioenvs/ble-gw/firmware.factory.bin out/ble-gw-${BRANCH}-latest.factory.bin 2>/dev/null || true
           
+          echo "Generated firmware files:"
           ls -lh out/
 
       - uses: actions/upload-artifact@v4
@@ -65,28 +64,35 @@ jobs:
           name: firmware-${{ steps.version.outputs.version }}
           path: out/
 
-      # 🔥 自动创建 GitHub Release
+      # 🔥 自动创建 GitHub Release (标题和描述中明确标注分支)
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "Build ${{ steps.version.outputs.version }}"
+          name: "🚀 Build ${{ steps.version.outputs.version }}"
           body: |
-            ## 🚀 自动构建
+            ## 📦 自动构建完成
             
-            **版本**: `${{ steps.version.outputs.version }}`
-            **编译时间**: ${{ github.event.head_commit.timestamp }}
-            **Commit**: `${{ github.sha }}`
+            - **分支**: `${{ github.ref_name }}`
+            - **版本**: `${{ steps.version.outputs.version }}`
+            - **编译时间**: ${{ github.event.head_commit.timestamp }}
+            - **Commit**: `${{ github.sha }}`
             
-            ### 📦 固件文件
-            - `ble-gw-${{ steps.version.outputs.version }}.bin` - OTA 升级固件
-            - `ble-gw-latest.bin` - 最新版本（始终指向最新构建）
+            ### 📥 固件下载
+            
+            | 文件名 | 用途说明 |
+            | :--- | :--- |
+            | `ble-gw-${{ github.ref_name }}-latest.bin` | **推荐**：该分支最新的 OTA 升级固件 |
+            | `ble-gw-${{ github.ref_name }}-latest.factory.bin` | **推荐**：该分支最新的首次 USB 烧录固件 |
+            | `ble-gw-${{ github.ref_name }}-${{ steps.version.outputs.version }}.bin` | 带版本号的 OTA 固件 (归档用) |
+            
+            > 💡 **提示**：请根据你当前使用的分支 (`main` 或 `dan`) 选择对应的固件进行 OTA 升级。
           draft: false
           prerelease: false
           files: |
-            out/ble-gw-${{ steps.version.outputs.version }}.bin
-            out/ble-gw-${{ steps.version.outputs.version }}.factory.bin
-            out/ble-gw-latest.bin
-            out/ble-gw-latest.factory.bin
+            out/ble-gw-${{ github.ref_name }}-${{ steps.version.outputs.version }}.bin
+            out/ble-gw-${{ github.ref_name }}-${{ steps.version.outputs.version }}.factory.bin
+            out/ble-gw-${{ github.ref_name }}-latest.bin
+            out/ble-gw-${{ github.ref_name }}-latest.factory.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
