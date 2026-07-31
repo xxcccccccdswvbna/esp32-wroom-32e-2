@@ -56,16 +56,22 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云直连 =====================
+# ===================== 接入本地 HA MQTT =====================
 mqtt:
-  id: bemfa
-  broker: bemfa.com
-  port: 9501
-  username: "97109945d7e24559b3e4ca7a1f8ef160"
-  password: "97109945d7e24559b3e4ca7a1f8ef160"
-  client_id: "97109945d7e24559b3e4ca7a1f8ef160"
+  id: bemfa  # 保持 id 不变，之前的代码里用到了这个 id
+  broker: "192.168.6.88"          # 🔥 改为你的 HA 的 IP 地址
+  port: 1883
+  # 🔥 如果你的 HA MQTT 设置了账号密码，请填入；如果没有，请删除这两行
+  username: "your_ha_mqtt_user"   
+  password: "your_ha_mqtt_pass"   
+  
+  client_id: "ble_gw_01"          # 本地客户端 ID，随意命名
   keepalive: 30s
-  discovery: false
+  
+  # 🔥 开启 HA 自动发现，ESP32 的传感器会自动出现在 HA 中
+  discovery: true                 
+  discovery_prefix: "homeassistant"
+  
   birth_message:
   will_message:
   on_message:
