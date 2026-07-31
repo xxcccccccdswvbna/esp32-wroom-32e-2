@@ -202,44 +202,38 @@ esp32_ble_tracker:
                         bool fan_run = (fan_state & 0x01) != 0; 
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                        // 1. 状态缓存变量
                         static bool ct_last_light = false;
                         static int ct_last_brt = -1;
                         static int ct_last_ct = -1;
                         static bool ct_last_fan_run = false;
                         static int ct_last_fan_spd = -1;
-                        
-                        // 2. 时间记录变量
-                        static uint32_t ct_last_report = 0;   // 上次触发上报的时间
-                        static uint32_t ct_last_change = 0;   // 🔥 新增：上次状态发生变化的时间
+                        static uint32_t ct_last_report = 0;
+                        static uint32_t ct_last_change = 0;
+                        static uint8_t ct_retry_count = 0; // 🔥 新增：限制重试次数
 
-                        // 3. 判断条件
                         bool changed = (light_on != ct_last_light) || (brt != ct_last_brt) || 
                                        (ct_k != ct_last_ct) || (fan_run != ct_last_fan_run) || (fan_spd != ct_last_fan_spd);
                         
-                        bool heartbeat = (millis() - ct_last_report > 60000); // 60秒保活
+                        if (changed) {
+                            ct_last_change = millis();
+                            ct_retry_count = 0; // 状态变化时，重置重试计数
+                            ct_last_light = light_on; ct_last_brt = brt; ct_last_ct = ct_k;
+                            ct_last_fan_run = fan_run; ct_last_fan_spd = fan_spd;
+                        }
                         
-                        // 🔥 核心修复：如果状态刚变化不久(10秒内)，且距离上次上报已超过3秒，则触发重试上报
-                        bool retry = (millis() - ct_last_change < 10000) && (millis() - ct_last_report > 3000);
+                        bool heartbeat = (millis() - ct_last_report > 60000);
+                        // 🔥 修复：最多重试 3 次 (9秒)，之后强制等待 60 秒保活，绝不无限推迟
+                        bool retry = (millis() - ct_last_change < 10000) && (ct_retry_count < 3) && (millis() - ct_last_report > 3000);
 
                         if (changed || heartbeat || retry) {
-                            if (changed) {
-                                ct_last_change = millis(); // 记录变化时间
-                                // 更新缓存 (只在真正变化时更新，保证重试时发的是最新状态)
-                                ct_last_light = light_on;
-                                ct_last_brt = brt;
-                                ct_last_ct = ct_k;
-                                ct_last_fan_run = fan_run;
-                                ct_last_fan_spd = fan_spd;
-                            }
+                            if (retry) ct_retry_count++;
+                            else ct_retry_count = 0;
                             
-                            ct_last_report = millis(); // 无论因为变化、保活还是重试，都更新上报时间
+                            ct_last_report = millis();
 
-                            // 打印日志 (清晰区分是变化、重试还是保活)
                             const char* reason = changed ? "CHANGE" : (retry ? "RETRY" : "HEARTBEAT");
                             ESP_LOGI("134D", "ct REPORT [%s] L:%d B:%d C:%d F:%d S:%d", reason, light_on, brt, ct_k, fan_run, fan_spd);
 
-                            // 执行上报
                             if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("ctlight002/up", "off");
                             
@@ -250,7 +244,7 @@ esp32_ble_tracker:
                     }
                 }
 
-                // ===== 次卧 134D =====
+                // ===== 次卧 134D (同理修改) =====
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
@@ -261,33 +255,31 @@ esp32_ble_tracker:
                         bool fan_run = (fan_state & 0x01) != 0;
                         int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                        // 1. 状态缓存变量
                         static bool cw_last_light = false;
                         static int cw_last_brt = -1;
                         static int cw_last_ct = -1;
                         static bool cw_last_fan_run = false;
                         static int cw_last_fan_spd = -1;
-                        
-                        // 2. 时间记录变量
                         static uint32_t cw_last_report = 0;
-                        static uint32_t cw_last_change = 0;   // 🔥 新增
+                        static uint32_t cw_last_change = 0;
+                        static uint8_t cw_retry_count = 0;
 
-                        // 3. 判断条件
                         bool changed = (light_on != cw_last_light) || (brt != cw_last_brt) || 
                                        (ct_k != cw_last_ct) || (fan_run != cw_last_fan_run) || (fan_spd != cw_last_fan_spd);
                         
+                        if (changed) {
+                            cw_last_change = millis();
+                            cw_retry_count = 0;
+                            cw_last_light = light_on; cw_last_brt = brt; cw_last_ct = ct_k;
+                            cw_last_fan_run = fan_run; cw_last_fan_spd = fan_spd;
+                        }
+                        
                         bool heartbeat = (millis() - cw_last_report > 60000);
-                        bool retry = (millis() - cw_last_change < 10000) && (millis() - cw_last_report > 3000);
+                        bool retry = (millis() - cw_last_change < 10000) && (cw_retry_count < 3) && (millis() - cw_last_report > 3000);
 
                         if (changed || heartbeat || retry) {
-                            if (changed) {
-                                cw_last_change = millis();
-                                cw_last_light = light_on;
-                                cw_last_brt = brt;
-                                cw_last_ct = ct_k;
-                                cw_last_fan_run = fan_run;
-                                cw_last_fan_spd = fan_spd;
-                            }
+                            if (retry) cw_retry_count++;
+                            else cw_retry_count = 0;
                             
                             cw_last_report = millis();
 
