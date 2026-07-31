@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, dan ]
+    branches: [main, dan]
   workflow_dispatch:
 
 permissions:
@@ -11,99 +11,147 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install esphome
+      - name: Install ESPHome
+        run: pip install esphome
 
-      # 🔥 修复版：使用 -w 全词匹配，精准提取 esphome 下的 name，避开 project_name
+      # 精准提取 esphome 下的 name，避免匹配 project_name
       - name: Get Device Name
         id: device
         run: |
-          # 使用 grep -w 精确匹配独立的 "name:"，避免匹配到 "project_name:"
           DEVICE_NAME=$(grep -m 1 -w 'name:' ble_gateway.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
-          echo "Extracted device name: $DEVICE_NAME"
-          echo "name=$DEVICE_NAME" >> $GITHUB_OUTPUT
 
-      # 🔥 生成时间戳并注入到 YAML 文件中
+          if [ -z "$DEVICE_NAME" ]; then
+            echo "ERROR: Failed to extract device name!"
+            exit 1
+          fi
+
+          echo "Extracted device name: $DEVICE_NAME"
+          echo "name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+
+      # 注入构建时间
       - name: Inject Build Timestamp
+        id: build_time
         run: |
-          BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')
-          echo "Build time will be: $BUILD_TIME"
-          sed -i "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml
+          BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+          echo "Build time: $BUILD_TIME"
+
+          sed -i \
+            "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" \
+            ble_gateway.yaml
+
           grep "build_time:" ble_gateway.yaml
 
-      - run: esphome compile ble_gateway.yaml
+          echo "time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
 
-      # 🔥 生成版本标签
-      - name: Generate version tag
+      # 编译 ESPHome
+      - name: Compile ESPHome Firmware
+        run: esphome compile ble_gateway.yaml
+
+      # 生成版本号
+      - name: Generate Version Tag
         id: version
         run: |
-          BRANCH="${{ github.ref_name }}"
-          VERSION="v$(date +'%Y.%m%d.%H%M')-${BRANCH}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version for branch '$BRANCH': $VERSION"
+          VERSION="v$(date -u +'%Y.%m%d.%H%M')"
 
-      # 🔥 收集并重命名固件
-      - name: Collect and rename firmware
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Generated version: $VERSION"
+
+      # 收集固件
+      # 不再生成 latest.bin
+      - name: Collect Firmware
         run: |
+          set -e
+
           mkdir -p out
+
           DEVICE_NAME="${{ steps.device.outputs.name }}"
           BRANCH="${{ github.ref_name }}"
           VERSION="${{ steps.version.outputs.version }}"
-          
-          echo "Collecting firmware for device: $DEVICE_NAME"
-          
-          # 复制并重命名
-          cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.bin" "out/${DEVICE_NAME}-${BRANCH}-${VERSION}.bin"
-          cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.factory.bin" "out/${DEVICE_NAME}-${BRANCH}-${VERSION}.factory.bin" 2>/dev/null || true
-          
-          # 保留 latest 版本
-          cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.bin" "out/${DEVICE_NAME}-${BRANCH}-latest.bin"
-          cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.factory.bin" "out/${DEVICE_NAME}-${BRANCH}-latest.factory.bin" 2>/dev/null || true
-          
-          echo "Generated firmware files:"
+
+          BUILD_DIR=".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}"
+
+          OTA_FILE="${DEVICE_NAME}-${BRANCH}-${VERSION}.bin"
+          FACTORY_FILE="${DEVICE_NAME}-${BRANCH}-${VERSION}.factory.bin"
+
+          echo "Device: $DEVICE_NAME"
+          echo "Branch: $BRANCH"
+          echo "Version: $VERSION"
+
+          # OTA 升级固件
+          cp \
+            "${BUILD_DIR}/firmware.bin" \
+            "out/${OTA_FILE}"
+
+          # 首次烧录固件
+          if [ -f "${BUILD_DIR}/firmware.factory.bin" ]; then
+            cp \
+              "${BUILD_DIR}/firmware.factory.bin" \
+              "out/${FACTORY_FILE}"
+          else
+            echo "WARNING: firmware.factory.bin was not generated."
+          fi
+
+          echo
+          echo "Generated firmware:"
           ls -lh out/
 
-      - uses: actions/upload-artifact@v4
+      # 上传 Actions 构建产物
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          name: firmware-${{ github.ref_name }}-${{ steps.version.outputs.version }}
           path: out/
+          if-no-files-found: error
 
-      # 🔥 自动创建 GitHub Release
+      # 创建 GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "🚀 Build ${{ steps.version.outputs.version }}"
+          name: "🚀 ${{ steps.device.outputs.name }} ${{ github.ref_name }} ${{ steps.version.outputs.version }}"
           body: |
-            ## 📦 自动构建完成
-            
-            - **设备名称**: `${{ steps.device.outputs.name }}`
-            - **分支**: `${{ github.ref_name }}`
-            - **版本**: `${{ steps.version.outputs.version }}`
-            - **编译时间**: ${{ github.event.head_commit.timestamp }}
-            - **Commit**: `${{ github.sha }}`
-            
-            ### 📥 固件下载
-            
-            | 文件名 | 用途说明 |
-            | :--- | :--- |
-            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-latest.bin` | **推荐**：该分支最新的 OTA 升级固件 |
-            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-latest.factory.bin` | **推荐**：该分支最新的首次 USB 烧录固件 |
-            
-            > 💡 **提示**：请根据你当前使用的分支 (`main` 或 `dan`) 选择对应的固件进行 OTA 升级。
+            ## 📦 ESPHome 自动构建
+
+            | 项目 | 信息 |
+            |---|---|
+            | 设备 | `${{ steps.device.outputs.name }}` |
+            | 分支 | `${{ github.ref_name }}` |
+            | 版本 | `${{ steps.version.outputs.version }}` |
+            | 构建时间 | `${{ steps.build_time.outputs.time }}` |
+            | Commit | `${{ github.sha }}` |
+
+            ## 📥 固件说明
+
+            | 固件 | 用途 |
+            |---|---|
+            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.bin` | OTA 在线升级 |
+            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.factory.bin` | 首次 USB/串口烧录 |
+
+            > 当前 Release 对应版本：
+            > `${{ steps.version.outputs.version }}`
+
+            > `.bin`：用于 ESPHome OTA 在线升级  
+            > `.factory.bin`：用于首次 USB/串口烧录
+
           draft: false
           prerelease: false
+          generate_release_notes: true
+
           files: |
-            out/${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.bin
-            out/${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.factory.bin
-            out/${{ steps.device.outputs.name }}-${{ github.ref_name }}-latest.bin
-            out/${{ steps.device.outputs.name }}-${{ github.ref_name }}-latest.factory.bin
+            out/*.bin
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
