@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, dan ]  # 监听多个分支
+    branches: [ main, dan ]
   workflow_dispatch:
 
 permissions:
@@ -20,17 +20,16 @@ jobs:
 
       - run: pip install esphome
 
-      # 🔥 步骤 1：自动从 YAML 中提取设备名称 (例如 yy1)
+      # 🔥 修复版：使用 -w 全词匹配，精准提取 esphome 下的 name，避开 project_name
       - name: Get Device Name
         id: device
         run: |
-          # 从 ble_gateway.yaml 中提取 name 字段，并去除空格和引号
-          # 如果你的 yaml 文件名不是 ble_gateway.yaml，请修改下面的文件名
-          DEVICE_NAME=$(grep -m 1 'name:' ble_gateway.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          # 使用 grep -w 精确匹配独立的 "name:"，避免匹配到 "project_name:"
+          DEVICE_NAME=$(grep -m 1 -w 'name:' ble_gateway.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
           echo "Extracted device name: $DEVICE_NAME"
           echo "name=$DEVICE_NAME" >> $GITHUB_OUTPUT
 
-      # 🔥 步骤 2：生成时间戳并注入到 YAML 文件中
+      # 🔥 生成时间戳并注入到 YAML 文件中
       - name: Inject Build Timestamp
         run: |
           BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')
@@ -38,10 +37,9 @@ jobs:
           sed -i "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml
           grep "build_time:" ble_gateway.yaml
 
-      # 🔥 步骤 3：编译 (ESPHome 会自动使用提取出的 name)
       - run: esphome compile ble_gateway.yaml
 
-      # 🔥 步骤 4：生成版本标签
+      # 🔥 生成版本标签
       - name: Generate version tag
         id: version
         run: |
@@ -51,7 +49,7 @@ jobs:
           echo "tag=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version for branch '$BRANCH': $VERSION"
 
-      # 🔥 步骤 5：收集并重命名固件 (使用动态获取的 DEVICE_NAME)
+      # 🔥 收集并重命名固件
       - name: Collect and rename firmware
         run: |
           mkdir -p out
@@ -61,7 +59,7 @@ jobs:
           
           echo "Collecting firmware for device: $DEVICE_NAME"
           
-          # 复制并重命名，路径中全部使用 $DEVICE_NAME 变量
+          # 复制并重命名
           cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.bin" "out/${DEVICE_NAME}-${BRANCH}-${VERSION}.bin"
           cp ".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}/firmware.factory.bin" "out/${DEVICE_NAME}-${BRANCH}-${VERSION}.factory.bin" 2>/dev/null || true
           
@@ -77,7 +75,7 @@ jobs:
           name: firmware-${{ steps.version.outputs.version }}
           path: out/
 
-      # 🔥 步骤 6：自动创建 GitHub Release
+      # 🔥 自动创建 GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
