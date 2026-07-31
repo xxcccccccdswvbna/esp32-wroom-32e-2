@@ -242,18 +242,18 @@ sensor:
   - platform: uptime
     name: "Gateway Uptime"
     id: gateway_uptime
-    update_interval: 360s
+    update_interval: 60s
 
   - platform: internal_temperature
     name: "ESP32 Chip Temperature"
     unit_of_measurement: "°C"
     accuracy_decimals: 1
-    update_interval: 360s
+    update_interval: 60s
 
   - platform: wifi_signal
     name: "WiFi Signal dBm"
     id: wifi_signal_db
-    update_interval: 360s
+    update_interval: 60s
 
   - platform: copy
     source_id: wifi_signal_db
@@ -276,7 +276,7 @@ text_sensor:
     lambda: |-
       return {"${build_time}"};
     icon: mdi:calendar-clock
-    update_interval: 360s
+    update_interval: 3600s
 
   - platform: version
     name: "ESPHome Version"
