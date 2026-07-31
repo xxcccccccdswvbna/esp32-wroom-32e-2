@@ -5,7 +5,7 @@ substitutions:
   build_time: "Unknown" 
 
 esphome:
-  name: ble-gw
+  name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
 
