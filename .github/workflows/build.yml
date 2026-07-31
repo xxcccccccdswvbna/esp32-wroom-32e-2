@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main ]
+    branches: [ dan ]
   workflow_dispatch:
 
 # 🔥 修复 403 错误：显式授予写入仓库内容的权限
