@@ -358,6 +358,10 @@ switch:
           id(bemfa).publish("cwfan003", "off");
 
 button:
+  # 1. 重启按钮 (保留原来的)
+  - platform: restart
+    name: "Restart Gateway"
+    icon: mdi:restart
   # ===== 餐厅风扇档位 =====
   - platform: template
     name: "餐厅风扇 1档"
@@ -463,7 +467,4 @@ text_sensor:
       name: "ESP Connected BSSID"
     mac_address:
       name: "ESP MAC Address"
-button:
-  - platform: restart
-    name: "Restart Gateway"
-    icon: mdi:restart
+
