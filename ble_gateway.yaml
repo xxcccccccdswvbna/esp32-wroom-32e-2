@@ -540,3 +540,79 @@ sensor:
     id: cw_fan_spd
     icon: mdi:fan-speed-1
     
+  # === 系统状态 ===
+  - platform: uptime
+    name: "Gateway Uptime 运行时间"
+    id: gateway_uptime
+    update_interval: 60s
+    icon: mdi:timer-outline
+    
+  - platform: internal_temperature
+    name: "ESP32 Temp 芯片温度"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+    icon: mdi:thermometer
+    
+  - platform: wifi_signal
+    name: "WiFi dBm 信号强度"
+    id: wifi_signal_db
+    update_interval: 60s
+    icon: mdi:wifi
+    
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Pct 信号百分比"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:wifi-strength-4
+
+# ===================== 二进制传感器 =====================
+binary_sensor:
+  - platform: status
+    name: "Gateway Status 网关状态"
+    device_class: connectivity
+    
+  - platform: template
+    name: "Dining Light State 餐厅灯状态"
+    id: ct_light_state
+    device_class: light
+    
+  - platform: template
+    name: "Bedroom Light State 次卧灯状态"
+    id: cw_light_state
+    device_class: light
+    
+  - platform: template
+    name: "Dining Fan State 餐厅风扇状态"
+    id: ct_fan_state
+    device_class: running
+    
+  - platform: template
+    name: "Bedroom Fan State 次卧风扇状态"
+    id: cw_fan_state
+    device_class: running
+
+# ===================== 文本传感器 =====================
+text_sensor:
+  - platform: template
+    name: "Build Time 编译时间"
+    lambda: 'return {"${build_time}"};'
+    icon: mdi:calendar-clock
+    update_interval: 3600s
+    
+  - platform: version
+    name: "ESPHome Ver 版本"
+    hide_timestamp: true
+    
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP 地址"
+      icon: mdi:ip
+    ssid:
+      name: "ESP SSID WiFi名"
+      icon: mdi:wifi
+    mac_address:
+      name: "ESP MAC 物理地址"
