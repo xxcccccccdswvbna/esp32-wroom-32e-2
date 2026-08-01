@@ -297,13 +297,11 @@ esp32_ble_tracker:
                     }
                 }
             }
-# ===================== 局域网控制 (ESPHome 2026.6.5 兼容) =====================
-# 使用 switch + button 替代已被删除的 light.template / fan.template
-
+# ===================== 局域网控制 (修复 ID 冲突) =====================
 switch:
   # ===== 餐厅灯 =====
   - platform: template
-    name: "餐厅灯"
+    name: "餐厅灯 Dining"       # 🔥 加上英文，防止 ID 变成 ___
     id: ct_light_sw
     optimistic: true
     turn_on_action:
@@ -317,7 +315,7 @@ switch:
 
   # ===== 餐厅风扇 =====
   - platform: template
-    name: "餐厅风扇"
+    name: "餐厅风扇 Dining"     # 🔥 加上英文
     id: ct_fan_sw
     optimistic: true
     turn_on_action:
@@ -331,7 +329,7 @@ switch:
 
   # ===== 次卧灯 =====
   - platform: template
-    name: "次卧灯"
+    name: "次卧灯 Bedroom"      # 🔥 加上英文
     id: cw_light_sw
     optimistic: true
     turn_on_action:
@@ -345,7 +343,7 @@ switch:
 
   # ===== 次卧风扇 =====
   - platform: template
-    name: "次卧风扇"
+    name: "次卧风扇 Bedroom"    # 🔥 加上英文
     id: cw_fan_sw
     optimistic: true
     turn_on_action:
@@ -358,31 +356,32 @@ switch:
           id(bemfa).publish("cwfan003", "off");
 
 button:
-  # 1. 重启按钮 (保留原来的)
+  # ===== 重启按钮 =====
   - platform: restart
     name: "Restart Gateway"
     icon: mdi:restart
+
   # ===== 餐厅风扇档位 =====
   - platform: template
-    name: "餐厅风扇 1档"
+    name: "餐厅风扇 1档 Dining"  # 🔥 加上英文
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");
           id(bemfa).publish("ctfan003", "on#1");
   - platform: template
-    name: "餐厅风扇 2档"
+    name: "餐厅风扇 2档 Dining"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
           id(bemfa).publish("ctfan003", "on#2");
   - platform: template
-    name: "餐厅风扇 3档"
+    name: "餐厅风扇 3档 Dining"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
           id(bemfa).publish("ctfan003", "on#3");
   - platform: template
-    name: "餐厅风扇 4档"
+    name: "餐厅风扇 4档 Dining"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A|0201021BFF114D1911488027700000016EB8CE48A7F08080972727707000D7");
@@ -390,25 +389,25 @@ button:
 
   # ===== 次卧风扇档位 =====
   - platform: template
-    name: "次卧风扇 1档"
+    name: "次卧风扇 1档 Bedroom" # 🔥 加上英文
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
           id(bemfa).publish("cwfan003", "on#1");
   - platform: template
-    name: "次卧风扇 2档"
+    name: "次卧风扇 2档 Bedroom"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");
           id(bemfa).publish("cwfan003", "on#2");
   - platform: template
-    name: "次卧风扇 3档"
+    name: "次卧风扇 3档 Bedroom"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");
           id(bemfa).publish("cwfan003", "on#3");
   - platform: template
-    name: "次卧风扇 4档"
+    name: "次卧风扇 4档 Bedroom"
     on_press:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");
