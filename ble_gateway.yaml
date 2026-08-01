@@ -308,6 +308,10 @@ esp32_ble_tracker:
                     id(ct_light_ct).publish_state(ct_k);
                     id(ct_fan_state).publish_state(fan_run);
                     id(ct_fan_spd).publish_state(fan_spd);
+                    
+                    // 🔥 同步开关状态
+                    id(ct_light_sw).publish_state(light_on);
+                    id(ct_fan_sw).publish_state(fan_run);
                   }
                   break;
                 }
@@ -373,67 +377,75 @@ esp32_ble_tracker:
                     id(cw_light_ct).publish_state(ct_k);
                     id(cw_fan_state).publish_state(fan_run);
                     id(cw_fan_spd).publish_state(fan_spd);
+                    
+                    // 🔥 同步开关状态
+                    id(cw_light_sw).publish_state(light_on);
+                    id(cw_fan_sw).publish_state(fan_run);
                   }
                   break;
                 }
               }
             }
 
-# ===================== 开关 =====================
+# ===================== 开关（支持状态反馈） =====================
 switch:
   # === 餐厅灯 ===
   - platform: template
     name: "Dining Light 餐厅灯"
     id: ct_light_sw
     icon: mdi:ceiling-light
-    optimistic: true
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
+      - lambda: 'id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");'
     turn_off_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
+      - lambda: 'id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");'
+    lambda: |-
+      return id(ct_light_state).state;
 
   # === 餐厅风扇 ===
   - platform: template
     name: "Dining Fan 餐厅风扇"
     id: ct_fan_sw
     icon: mdi:fan
-    optimistic: true
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
+      - lambda: 'id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");'
     turn_off_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
+      - lambda: 'id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");'
+    lambda: |-
+      return id(ct_fan_state).state;
 
   # === 次卧灯 ===
   - platform: template
     name: "Bedroom Light 次卧灯"
     id: cw_light_sw
     icon: mdi:ceiling-light
-    optimistic: true
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
+      - lambda: 'id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");'
     turn_off_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
+      - lambda: 'id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");'
+    lambda: |-
+      return id(cw_light_state).state;
 
   # === 次卧风扇 ===
   - platform: template
     name: "Bedroom Fan 次卧风扇"
     id: cw_fan_sw
     icon: mdi:fan
-    optimistic: true
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
+      - lambda: 'id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");'
     turn_off_action:
-      - lambda: |-
-          id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
+      - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");'
+    lambda: |-
+      return id(cw_fan_state).state;
 
-# ===================== 按钮 =====================
+# ===================== 按钮（风扇档位） =====================
 button:
   - platform: restart
     name: "Restart 重启网关"
