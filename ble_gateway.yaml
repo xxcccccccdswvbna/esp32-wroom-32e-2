@@ -177,7 +177,7 @@ mqtt:
                 }
             }
 
-# ===================== 状态监听 → 上报巴法云 (智能节流版) =====================
+# ===================== 状态监听 → 上报巴法云 + HA (智能节流版) =====================
 esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
@@ -209,20 +209,19 @@ esp32_ble_tracker:
                         static int ct_last_fan_spd = -1;
                         static uint32_t ct_last_report = 0;
                         static uint32_t ct_last_change = 0;
-                        static uint8_t ct_retry_count = 0; // 🔥 新增：限制重试次数
+                        static uint8_t ct_retry_count = 0;
 
                         bool changed = (light_on != ct_last_light) || (brt != ct_last_brt) || 
                                        (ct_k != ct_last_ct) || (fan_run != ct_last_fan_run) || (fan_spd != ct_last_fan_spd);
                         
                         if (changed) {
                             ct_last_change = millis();
-                            ct_retry_count = 0; // 状态变化时，重置重试计数
+                            ct_retry_count = 0;
                             ct_last_light = light_on; ct_last_brt = brt; ct_last_ct = ct_k;
                             ct_last_fan_run = fan_run; ct_last_fan_spd = fan_spd;
                         }
                         
                         bool heartbeat = (millis() - ct_last_report > 60000);
-                        // 🔥 修复：最多重试 3 次 (9秒)，之后强制等待 60 秒保活，绝不无限推迟
                         bool retry = (millis() - ct_last_change < 10000) && (ct_retry_count < 3) && (millis() - ct_last_report > 3000);
 
                         if (changed || heartbeat || retry) {
@@ -234,17 +233,25 @@ esp32_ble_tracker:
                             const char* reason = changed ? "CHANGE" : (retry ? "RETRY" : "HEARTBEAT");
                             ESP_LOGI("134D", "ct REPORT [%s] L:%d B:%d C:%d F:%d S:%d", reason, light_on, brt, ct_k, fan_run, fan_spd);
 
+                            // 🔥 1. 发给巴法云 (供小爱/米家同步)
                             if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("ctlight002/up", "off");
                             
                             if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("ctfan003/up", "off");
+
+                            // 🔥 2. 发给内部传感器 (通过 API 瞬间同步给 HA，无需本地 MQTT)
+                            id(ct_light_state).publish_state(light_on);
+                            id(ct_light_brt).publish_state(brt);
+                            id(ct_light_ct).publish_state(ct_k);
+                            id(ct_fan_state).publish_state(fan_run);
+                            id(ct_fan_spd).publish_state(fan_spd);
                         }
                         break;
                     }
                 }
 
-                // ===== 次卧 134D (同理修改) =====
+                // ===== 次卧 134D =====
                 uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {
                     if (memcmp(&raw[i], cw_mac, 6) == 0) {
@@ -286,11 +293,19 @@ esp32_ble_tracker:
                             const char* reason = changed ? "CHANGE" : (retry ? "RETRY" : "HEARTBEAT");
                             ESP_LOGI("134D", "cw REPORT [%s] L:%d B:%d C:%d F:%d S:%d", reason, light_on, brt, ct_k, fan_run, fan_spd);
 
+                            // 🔥 1. 发给巴法云
                             if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
                             else id(bemfa).publish("cwlight002/up", "off");
                             
                             if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
                             else id(bemfa).publish("cwfan003/up", "off");
+
+                            // 🔥 2. 发给内部传感器
+                            id(cw_light_state).publish_state(light_on);
+                            id(cw_light_brt).publish_state(brt);
+                            id(cw_light_ct).publish_state(ct_k);
+                            id(cw_fan_state).publish_state(fan_run);
+                            id(cw_fan_spd).publish_state(fan_spd);
                         }
                         break;
                     }
@@ -399,6 +414,28 @@ button:
           id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");
 # ===================== 系统状态传感器 =====================
 sensor:
+  - platform: template
+    name: "餐厅灯亮度"
+    id: ct_light_brt
+    unit_of_measurement: "%"
+  - platform: template
+    name: "餐厅灯色温"
+    id: ct_light_ct
+    unit_of_measurement: "K"
+  - platform: template
+    name: "餐厅风扇档位"
+    id: ct_fan_spd
+  - platform: template
+    name: "次卧灯亮度"
+    id: cw_light_brt
+    unit_of_measurement: "%"
+  - platform: template
+    name: "次卧灯色温"
+    id: cw_light_ct
+    unit_of_measurement: "K"
+  - platform: template
+    name: "次卧风扇档位"
+    id: cw_fan_spd  
   - platform: uptime
     name: "Gateway Uptime"
     id: gateway_uptime
@@ -428,7 +465,22 @@ binary_sensor:
   - platform: status
     name: "Gateway Status"
     device_class: connectivity
-
+    - platform: template
+    name: "餐厅灯状态"
+    id: ct_light_state
+    device_class: light
+  - platform: template
+    name: "次卧灯状态"
+    id: cw_light_state
+    device_class: light
+  - platform: template
+    name: "餐厅风扇状态"
+    id: ct_fan_state
+    device_class: running
+  - platform: template
+    name: "次卧风扇状态"
+    id: cw_fan_state
+    device_class: running
 text_sensor:
   # 🔥 显示注入的真实编译时间
   - platform: template
