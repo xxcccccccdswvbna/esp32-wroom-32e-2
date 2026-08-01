@@ -415,27 +415,27 @@ button:
 # ===================== 系统状态传感器 =====================
 sensor:
   - platform: template
-    name: "餐厅灯亮度"
+    name: "餐厅灯亮度 Dining"      # 🔥 加上英文
     id: ct_light_brt
     unit_of_measurement: "%"
   - platform: template
-    name: "餐厅灯色温"
+    name: "餐厅灯色温 Dining"      # 🔥 加上英文
     id: ct_light_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "餐厅风扇档位"
+    name: "餐厅风扇档位 Dining"    # 🔥 加上英文
     id: ct_fan_spd
   - platform: template
-    name: "次卧灯亮度"
+    name: "次卧灯亮度 Bedroom"     # 🔥 加上英文
     id: cw_light_brt
     unit_of_measurement: "%"
   - platform: template
-    name: "次卧灯色温"
+    name: "次卧灯色温 Bedroom"     # 🔥 加上英文
     id: cw_light_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "次卧风扇档位"
-    id: cw_fan_spd  
+    name: "次卧风扇档位 Bedroom"   # 🔥 加上英文
+    id: cw_fan_spd
   - platform: uptime
     name: "Gateway Uptime"
     id: gateway_uptime
@@ -466,19 +466,19 @@ binary_sensor:
     name: "Gateway Status"
     device_class: connectivity
   - platform: template
-    name: "餐厅灯状态"
+    name: "餐厅灯状态 Dining"      # 🔥 加上英文，防止 ID 变成 _____
     id: ct_light_state
     device_class: light
   - platform: template
-    name: "次卧灯状态"
+    name: "次卧灯状态 Bedroom"     # 🔥 加上英文
     id: cw_light_state
     device_class: light
   - platform: template
-    name: "餐厅风扇状态"
+    name: "餐厅风扇状态 Dining"    # 🔥 加上英文
     id: ct_fan_state
     device_class: running
   - platform: template
-    name: "次卧风扇状态"
+    name: "次卧风扇状态 Bedroom"   # 🔥 加上英文
     id: cw_fan_state
     device_class: running
 text_sensor:
