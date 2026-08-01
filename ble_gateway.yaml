@@ -297,118 +297,118 @@ esp32_ble_tracker:
                     }
                 }
             }
-# ===================== 新版 ESPHome 兼容配置 (Output + Light + Select) =====================
+# ===================== 局域网控制 (ESPHome 2026.6.5 兼容) =====================
+# 使用 switch + button 替代已被删除的 light.template / fan.template
 
-# ===== 1. 餐厅灯：虚拟 Output (负责接收亮度并发送 HEX) =====
-output:
+switch:
+  # ===== 餐厅灯 =====
   - platform: template
-    id: ct_light_output
-    type: float
-    write_action:
+    name: "餐厅灯"
+    id: ct_light_sw
+    optimistic: true
+    turn_on_action:
       - lambda: |-
-          int brt = round(state * 100.0f);
-          if (brt <= 0) return; // 亮度为0时由 light 组件的 on_turn_off 处理
-          
-          if (brt <= 30) id(tx).send_hex("0201021BFF114D19144880277000000149A6A1B3809727277070005FC86F3F|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
-          else if (brt <= 70) id(tx).send_hex("0201021BFF114D191948802770000001962676E970005FC86FB84848A7F06D|0201021BFF114D1913488027700000014948A7F080809727277070005FC86D");
-          else id(tx).send_hex("0201021BFF114D191B48802770000001267121FF5FC86FB84848A7F08080C4|0201021BFF114D191E48802770000001015FC86FB84848A7F0808097272772");
-          
-          id(bemfa).publish("ctlight002", "on#" + std::to_string(brt));
-
-# ===== 2. 餐厅灯：Light 实体 (绑定 Output，HA 中显示滑动条) =====
-light:
-  - platform: monochromatic
-    name: "餐厅灯(本地)"
-    id: ct_light_web
-    output: ct_light_output
-    on_turn_off:
+          id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
+          id(bemfa).publish("ctlight002", "on");
+    turn_off_action:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
           id(bemfa).publish("ctlight002", "off");
 
-  # ===== 次卧灯：虚拟 Output =====
+  # ===== 餐厅风扇 =====
   - platform: template
-    id: cw_light_output
-    type: float
-    write_action:
+    name: "餐厅风扇"
+    id: ct_fan_sw
+    optimistic: true
+    turn_on_action:
       - lambda: |-
-          int brt = round(state * 100.0f);
-          if (brt <= 0) return;
-          
-          if (brt <= 30) id(tx).send_hex("0201021BFF114D191CF0CF2D7000000171715169BF1D60F0F0FC3FCFCF9DA4|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
-          else if (brt <= 70) id(tx).send_hex("0201021BFF114D191EF0CF2D70000001015DEE8B60F0F0FC3FCFCF9D2D2D9A|0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002");
-          else id(tx).send_hex("0201021BFF114D191FF0CF2D700000015DBE4C9FF0F0FC3FCFCF9D2D2D7023|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
-          
-          id(bemfa).publish("cwlight002", "on#" + std::to_string(brt));
+          id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
+          id(bemfa).publish("ctfan003", "on#1");
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
+          id(bemfa).publish("ctfan003", "off");
 
-# ===== 次卧灯：Light 实体 =====
-  - platform: monochromatic
-    name: "次卧灯(本地)"
-    id: cw_light_web
-    output: cw_light_output
-    on_turn_off:
+  # ===== 次卧灯 =====
+  - platform: template
+    name: "次卧灯"
+    id: cw_light_sw
+    optimistic: true
+    turn_on_action:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
+          id(bemfa).publish("cwlight002", "on");
+    turn_off_action:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
           id(bemfa).publish("cwlight002", "off");
 
-# ===== 3. 餐厅风扇：Select 下拉选择 (最稳妥的新版写法) =====
-select:
+  # ===== 次卧风扇 =====
   - platform: template
-    name: "餐厅风扇(本地)"
-    id: ct_fan_web
-    options:
-      - "关"
-      - "1档"
-      - "2档"
-      - "3档"
-      - "4档"
-    set_action:
+    name: "次卧风扇"
+    id: cw_fan_sw
+    optimistic: true
+    turn_on_action:
       - lambda: |-
-          if (x == "关") {
-              id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
-              id(bemfa).publish("ctfan003", "off");
-          } else if (x == "1档") {
-              id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");
-              id(bemfa).publish("ctfan003", "on#1");
-          } else if (x == "2档") {
-              id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
-              id(bemfa).publish("ctfan003", "on#2");
-          } else if (x == "3档") {
-              id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
-              id(bemfa).publish("ctfan003", "on#3");
-          } else if (x == "4档") {
-              id(tx).send_hex("0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A|0201021BFF114D1911488027700000016EB8CE48A7F08080972727707000D7");
-              id(bemfa).publish("ctfan003", "on#4");
-          }
+          id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
+          id(bemfa).publish("cwfan003", "on#1");
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
+          id(bemfa).publish("cwfan003", "off");
 
-  # ===== 次卧风扇：Select 下拉选择 =====
+button:
+  # ===== 餐厅风扇档位 =====
   - platform: template
-    name: "次卧风扇(本地)"
-    id: cw_fan_web
-    options:
-      - "关"
-      - "1档"
-      - "2档"
-      - "3档"
-      - "4档"
-    set_action:
+    name: "餐厅风扇 1档"
+    on_press:
       - lambda: |-
-          if (x == "关") {
-              id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
-              id(bemfa).publish("cwfan003", "off");
-          } else if (x == "1档") {
-              id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
-              id(bemfa).publish("cwfan003", "on#1");
-          } else if (x == "2档") {
-              id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");
-              id(bemfa).publish("cwfan003", "on#2");
-          } else if (x == "3档") {
-              id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");
-              id(bemfa).publish("cwfan003", "on#3");
-          } else if (x == "4档") {
-              id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");
-              id(bemfa).publish("cwfan003", "on#4");
-          }
+          id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");
+          id(bemfa).publish("ctfan003", "on#1");
+  - platform: template
+    name: "餐厅风扇 2档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
+          id(bemfa).publish("ctfan003", "on#2");
+  - platform: template
+    name: "餐厅风扇 3档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
+          id(bemfa).publish("ctfan003", "on#3");
+  - platform: template
+    name: "餐厅风扇 4档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A|0201021BFF114D1911488027700000016EB8CE48A7F08080972727707000D7");
+          id(bemfa).publish("ctfan003", "on#4");
+
+  # ===== 次卧风扇档位 =====
+  - platform: template
+    name: "次卧风扇 1档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
+          id(bemfa).publish("cwfan003", "on#1");
+  - platform: template
+    name: "次卧风扇 2档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");
+          id(bemfa).publish("cwfan003", "on#2");
+  - platform: template
+    name: "次卧风扇 3档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");
+          id(bemfa).publish("cwfan003", "on#3");
+  - platform: template
+    name: "次卧风扇 4档"
+    on_press:
+      - lambda: |-
+          id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");
+          id(bemfa).publish("cwfan003", "on#4");
 # ===================== 系统状态传感器 =====================
 sensor:
   - platform: uptime
