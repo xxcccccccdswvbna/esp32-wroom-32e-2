@@ -465,7 +465,7 @@ binary_sensor:
   - platform: status
     name: "Gateway Status"
     device_class: connectivity
-    - platform: template
+  - platform: template
     name: "餐厅灯状态"
     id: ct_light_state
     device_class: light
