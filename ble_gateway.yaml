@@ -76,14 +76,12 @@ mqtt:
     - topic: "ctlight002"
       then:
         - lambda: |-
-            // 开关控制
             if (x == "on") {
               id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
             }
             else if (x == "off") {
               id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
             }
-            // 亮度+色温控制
             else if (x.find("on#") == 0) {
               std::string rest = x.substr(3);
               int v = atoi(rest.c_str());
@@ -91,7 +89,6 @@ mqtt:
               
               if (p2 != std::string::npos) {
                 int k = atoi(rest.substr(p2 + 1).c_str());
-                // 色温映射
                 if (k <= 3100) {
                   id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
                 }
@@ -103,7 +100,6 @@ mqtt:
                 }
               }
               
-              // 亮度映射
               if (v <= 10) {
                 id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
               }
@@ -142,7 +138,6 @@ mqtt:
             else if (x.find("on#") == 0) {
               int s = atoi(x.substr(3).c_str());
               ESP_LOGW("CMD", "ctfan speed=%d", s);
-              // 小爱档位映射到实际档位
               if (s == 1) {
                 id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");
               }
@@ -253,13 +248,10 @@ esp32_ble_tracker:
               auto &raw = data.data;
               if (raw.size() < 20) continue;
 
-              // ==========================================================
-              //  餐厅设备处理 (MAC: 48:80:27:70:00:00)
-              // ==========================================================
+              // ===== Dining 餐厅设备 (48:80:27:70:00:00) =====
               uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                  // 解析设备状态
                   bool light_on = (raw[i + 7] == 0x01);
                   int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
                   int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
@@ -267,7 +259,6 @@ esp32_ble_tracker:
                   bool fan_run = (fan_state & 0x01) != 0; 
                   int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
 
-                  // 状态变化检测与节流
                   static bool last_light = false;
                   static int last_brt = -1;
                   static int last_ct = -1;
@@ -300,7 +291,6 @@ esp32_ble_tracker:
                     ESP_LOGI("DINING", "[%s] Light:%d Brt:%d CT:%dK Fan:%d Spd:%d", 
                              reason, light_on, brt, ct_k, fan_run, fan_spd);
 
-                    // 上报到巴法云
                     if (light_on) {
                       id(bemfa).publish("ctlight002/up", "on#" + to_string(brt) + "#" + to_string(ct_k));
                     } else {
@@ -313,7 +303,6 @@ esp32_ble_tracker:
                       id(bemfa).publish("ctfan003/up", "off");
                     }
 
-                    // 更新HA传感器
                     id(ct_light_state).publish_state(light_on);
                     id(ct_light_brt).publish_state(brt);
                     id(ct_light_ct).publish_state(ct_k);
@@ -324,9 +313,7 @@ esp32_ble_tracker:
                 }
               }
 
-              // ==========================================================
-              //  次卧设备处理 (MAC: F0:CF:2D:70:00:00)
-              // ==========================================================
+              // ===== Bedroom 次卧设备 (F0:CF:2D:70:00:00) =====
               uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], cw_mac, 6) == 0) {
@@ -369,7 +356,6 @@ esp32_ble_tracker:
                     ESP_LOGI("BEDROOM", "[%s] Light:%d Brt:%d CT:%dK Fan:%d Spd:%d", 
                              reason, light_on, brt, ct_k, fan_run, fan_spd);
 
-                    // 上报到巴法云
                     if (light_on) {
                       id(bemfa).publish("cwlight002/up", "on#" + to_string(brt) + "#" + to_string(ct_k));
                     } else {
@@ -382,7 +368,6 @@ esp32_ble_tracker:
                       id(bemfa).publish("cwfan003/up", "off");
                     }
 
-                    // 更新HA传感器
                     id(cw_light_state).publish_state(light_on);
                     id(cw_light_brt).publish_state(brt);
                     id(cw_light_ct).publish_state(ct_k);
@@ -394,11 +379,11 @@ esp32_ble_tracker:
               }
             }
 
-# ===================== 开关实体 (局域网控制) =====================
+# ===================== 开关 =====================
 switch:
   # === 餐厅灯 ===
   - platform: template
-    name: "餐厅灯"
+    name: "Dining Light 餐厅灯"
     id: ct_light_sw
     icon: mdi:ceiling-light
     optimistic: true
@@ -411,7 +396,7 @@ switch:
 
   # === 餐厅风扇 ===
   - platform: template
-    name: "餐厅风扇"
+    name: "Dining Fan 餐厅风扇"
     id: ct_fan_sw
     icon: mdi:fan
     optimistic: true
@@ -424,7 +409,7 @@ switch:
 
   # === 次卧灯 ===
   - platform: template
-    name: "次卧灯"
+    name: "Bedroom Light 次卧灯"
     id: cw_light_sw
     icon: mdi:ceiling-light
     optimistic: true
@@ -437,7 +422,7 @@ switch:
 
   # === 次卧风扇 ===
   - platform: template
-    name: "次卧风扇"
+    name: "Bedroom Fan 次卧风扇"
     id: cw_fan_sw
     icon: mdi:fan
     optimistic: true
@@ -448,37 +433,37 @@ switch:
       - lambda: |-
           id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
 
-# ===================== 按钮实体 (风扇档位) =====================
+# ===================== 按钮 =====================
 button:
   - platform: restart
-    name: "重启网关"
+    name: "Restart 重启网关"
     icon: mdi:restart
     entity_category: diagnostic
 
   # === 餐厅风扇档位 ===
   - platform: template
-    name: "餐厅风扇 1档"
+    name: "Dining Fan 1 餐厅风扇1档"
     icon: mdi:numeric-1-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");'
       
   - platform: template
-    name: "餐厅风扇 2档"
+    name: "Dining Fan 2 餐厅风扇2档"
     icon: mdi:numeric-2-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");'
       
   - platform: template
-    name: "餐厅风扇 3档"
+    name: "Dining Fan 3 餐厅风扇3档"
     icon: mdi:numeric-3-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");'
       
   - platform: template
-    name: "餐厅风扇 4档"
+    name: "Dining Fan 4 餐厅风扇4档"
     icon: mdi:numeric-4-circle
     entity_category: config
     on_press:
@@ -486,146 +471,72 @@ button:
 
   # === 次卧风扇档位 ===
   - platform: template
-    name: "次卧风扇 1档"
+    name: "Bedroom Fan 1 次卧风扇1档"
     icon: mdi:numeric-1-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");'
       
   - platform: template
-    name: "次卧风扇 2档"
+    name: "Bedroom Fan 2 次卧风扇2档"
     icon: mdi:numeric-2-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");'
       
   - platform: template
-    name: "次卧风扇 3档"
+    name: "Bedroom Fan 3 次卧风扇3档"
     icon: mdi:numeric-3-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");'
       
   - platform: template
-    name: "次卧风扇 4档"
+    name: "Bedroom Fan 4 次卧风扇4档"
     icon: mdi:numeric-4-circle
     entity_category: config
     on_press:
       - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");'
 
-# ===================== 传感器实体 =====================
+# ===================== 传感器 =====================
 sensor:
-  # === 餐厅 ===
+  # === 餐厅灯 ===
   - platform: template
-    name: "餐厅灯亮度"
+    name: "Dining Brt 餐厅灯亮度"
     id: ct_light_brt
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     accuracy_decimals: 0
     
   - platform: template
-    name: "餐厅灯色温"
+    name: "Dining CT 餐厅灯色温"
     id: ct_light_ct
     unit_of_measurement: "K"
     icon: mdi:thermometer
     
+  # === 餐厅风扇 ===
   - platform: template
-    name: "餐厅风扇档位"
+    name: "Dining Spd 餐厅风扇档位"
     id: ct_fan_spd
     icon: mdi:fan-speed-1
     
-  # === 次卧 ===
+  # === 次卧灯 ===
   - platform: template
-    name: "次卧灯亮度"
+    name: "Bedroom Brt 次卧灯亮度"
     id: cw_light_brt
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     accuracy_decimals: 0
     
   - platform: template
-    name: "次卧灯色温"
+    name: "Bedroom CT 次卧灯色温"
     id: cw_light_ct
     unit_of_measurement: "K"
     icon: mdi:thermometer
     
+  # === 次卧风扇 ===
   - platform: template
-    name: "次卧风扇档位"
+    name: "Bedroom Spd 次卧风扇档位"
     id: cw_fan_spd
     icon: mdi:fan-speed-1
     
-  # === 系统状态 ===
-  - platform: uptime
-    name: "运行时间"
-    id: gateway_uptime
-    update_interval: 60s
-    icon: mdi:timer-outline
-    
-  - platform: internal_temperature
-    name: "芯片温度"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    update_interval: 60s
-    icon: mdi:thermometer
-    
-  - platform: wifi_signal
-    name: "WiFi信号"
-    id: wifi_signal_db
-    update_interval: 60s
-    icon: mdi:wifi
-    
-  - platform: copy
-    source_id: wifi_signal_db
-    name: "WiFi信号百分比"
-    filters:
-      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-    icon: mdi:wifi-strength-4
-
-# ===================== 二进制传感器 =====================
-binary_sensor:
-  - platform: status
-    name: "网关状态"
-    device_class: connectivity
-    
-  - platform: template
-    name: "餐厅灯状态"
-    id: ct_light_state
-    device_class: light
-    
-  - platform: template
-    name: "次卧灯状态"
-    id: cw_light_state
-    device_class: light
-    
-  - platform: template
-    name: "餐厅风扇状态"
-    id: ct_fan_state
-    device_class: running
-    
-  - platform: template
-    name: "次卧风扇状态"
-    id: cw_fan_state
-    device_class: running
-
-# ===================== 文本传感器 =====================
-text_sensor:
-  - platform: template
-    name: "编译时间"
-    lambda: 'return {"${build_time}"};'
-    icon: mdi:calendar-clock
-    update_interval: 3600s
-    
-  - platform: version
-    name: "ESPHome版本"
-    hide_timestamp: true
-    
-  - platform: wifi_info
-    ip_address:
-      name: "IP地址"
-      icon: mdi:ip
-    ssid:
-      name: "WiFi名称"
-      icon: mdi:wifi
-    mac_address:
-      name: "MAC地址"
