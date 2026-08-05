@@ -7,8 +7,6 @@ esphome:
   name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
-  includes:
-    - midea_ble_controller.h
 
 esp32:
   board: esp32dev
@@ -20,6 +18,7 @@ esp32:
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 
+# ===================== 系统基础 =====================
 logger:
   baud_rate: 0
   level: INFO
@@ -58,7 +57,7 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云 MQTT =====================
+# ===================== 巴法云 MQTT (直连) =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -71,64 +70,183 @@ mqtt:
   birth_message:
   will_message:
   on_message:
+    # ==========================================================
+    #  餐厅灯 (ctlight002) - 动态算法生成
+    # ==========================================================
     - topic: "ctlight002"
       then:
         - lambda: |-
-            MideaController ctrl("488027700000");
-            if (x == "on") {
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else if (x == "off") {
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else if (x.find("on#") == 0) {
-              std::string rest = x.substr(3);
-              int brt = atoi(rest.substr(0, rest.find('#')).c_str());
-              int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              uint8_t br = round(brt * 255.0 / 100.0);
-              uint8_t cv = round((ct - 2700.0) * 255.0 / 3800.0);
-              id(tx).send_hex(ctrl.make_command({0x5B, br, cv}, 2, 4));
+            std::string mac = "488027700000";
+            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
+                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+                uint8_t table[16]; int l=0, r=1;
+                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+                
+                auto make_pkt = [&](int flag) {
+                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                    for(auto v:values) chk = (chk+v)&0xFF;
+                    std::vector<uint8_t> p = {ch, ver, cmd_type};
+                    for(auto v:values) p.push_back(v);
+                    while(p.size()<15) p.push_back(0x00);
+                    p.push_back(chk);
+                    const char* hex = "0123456789ABCDEF";
+                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                    int idx = flag & 0x0F;
+                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                    return res;
+                };
+                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
+            };
+
+            if (x == "on") id(tx).send_hex(build_cmd({0x06}, 2, 4));
+            else if (x == "off") id(tx).send_hex(build_cmd({0x06}, 2, 4));
+            else if (x.find("on#") == 0) {
+                std::string rest = x.substr(3);
+                int v = std::stoi(rest);
+                size_t p2 = rest.find('#');
+                int ct_k = 4500;
+                if (p2 != std::string::npos) {
+                    int k = std::stoi(rest.substr(p2 + 1));
+                    if (k > 10000) ct_k = 4500;
+                    else if (k <= 100) ct_k = 2700 + (6500 - 2700) * k / 100;
+                    else ct_k = k;
+                }
+                int brt_val = std::round(v * 255.0 / 100.0);
+                int temp_val = std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0));
+                temp_val = std::max(0, std::min(255, temp_val));
+                id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
             }
+
+    # ==========================================================
+    #  餐厅风扇 (ctfan003) - 动态算法生成
+    # ==========================================================
     - topic: "ctfan003"
       then:
         - lambda: |-
-            MideaController ctrl("488027700000");
-            if (x == "on") {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else if (x == "off") {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else if (x.find("on#") == 0) {
-              int s = atoi(x.substr(3).c_str());
-              id(tx).send_hex(ctrl.make_fan_speed_command(s));
+            std::string mac = "488027700000";
+            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
+                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+                uint8_t table[16]; int l=0, r=1;
+                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+                
+                auto make_pkt = [&](int flag) {
+                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                    for(auto v:values) chk = (chk+v)&0xFF;
+                    std::vector<uint8_t> p = {ch, ver, cmd_type};
+                    for(auto v:values) p.push_back(v);
+                    while(p.size()<15) p.push_back(0x00);
+                    p.push_back(chk);
+                    const char* hex = "0123456789ABCDEF";
+                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                    int idx = flag & 0x0F;
+                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                    return res;
+                };
+                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
+            };
+
+            if (x == "on" || x == "off") id(tx).send_hex(build_cmd({0x09}, 8, 15)); // Toggle
+            else if (x.find("on#") == 0) {
+                int s = std::stoi(x.substr(3));
+                std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+                int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+                int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+                if (s >= 1 && s <= 6) id(tx).send_hex(build_cmd(v_map[s], c_map[s], e_map[s]));
             }
+
+    # ==========================================================
+    #  次卧灯 (cwlight002) - 动态算法生成
+    # ==========================================================
     - topic: "cwlight002"
       then:
         - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            if (x == "on") {
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else if (x == "off") {
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else if (x.find("on#") == 0) {
-              std::string rest = x.substr(3);
-              int brt = atoi(rest.substr(0, rest.find('#')).c_str());
-              int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              uint8_t br = round(brt * 255.0 / 100.0);
-              uint8_t cv = round((ct - 2700.0) * 255.0 / 3800.0);
-              id(tx).send_hex(ctrl.make_command({0x5B, br, cv}, 2, 4));
+            std::string mac = "F0CF2D700000";
+            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
+                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+                uint8_t table[16]; int l=0, r=1;
+                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+                
+                auto make_pkt = [&](int flag) {
+                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                    for(auto v:values) chk = (chk+v)&0xFF;
+                    std::vector<uint8_t> p = {ch, ver, cmd_type};
+                    for(auto v:values) p.push_back(v);
+                    while(p.size()<15) p.push_back(0x00);
+                    p.push_back(chk);
+                    const char* hex = "0123456789ABCDEF";
+                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                    int idx = flag & 0x0F;
+                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                    return res;
+                };
+                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
+            };
+
+            if (x == "on") id(tx).send_hex(build_cmd({0x06}, 2, 4));
+            else if (x == "off") id(tx).send_hex(build_cmd({0x06}, 2, 4));
+            else if (x.find("on#") == 0) {
+                std::string rest = x.substr(3);
+                int v = std::stoi(rest);
+                size_t p2 = rest.find('#');
+                int ct_k = 4500;
+                if (p2 != std::string::npos) {
+                    int k = std::stoi(rest.substr(p2 + 1));
+                    if (k > 10000) ct_k = 4500;
+                    else if (k <= 100) ct_k = 2700 + (6500 - 2700) * k / 100;
+                    else ct_k = k;
+                }
+                int brt_val = std::round(v * 255.0 / 100.0);
+                int temp_val = std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0));
+                temp_val = std::max(0, std::min(255, temp_val));
+                id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
             }
+
+    # ==========================================================
+    #  次卧风扇 (cwfan003) - 动态算法生成
+    # ==========================================================
     - topic: "cwfan003"
       then:
         - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            if (x == "on") {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else if (x == "off") {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else if (x.find("on#") == 0) {
-              int s = atoi(x.substr(3).c_str());
-              id(tx).send_hex(ctrl.make_fan_speed_command(s));
+            std::string mac = "F0CF2D700000";
+            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
+                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+                uint8_t table[16]; int l=0, r=1;
+                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+                
+                auto make_pkt = [&](int flag) {
+                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                    for(auto v:values) chk = (chk+v)&0xFF;
+                    std::vector<uint8_t> p = {ch, ver, cmd_type};
+                    for(auto v:values) p.push_back(v);
+                    while(p.size()<15) p.push_back(0x00);
+                    p.push_back(chk);
+                    const char* hex = "0123456789ABCDEF";
+                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                    int idx = flag & 0x0F;
+                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                    return res;
+                };
+                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
+            };
+
+            if (x == "on" || x == "off") id(tx).send_hex(build_cmd({0x09}, 8, 15)); // Toggle
+            else if (x.find("on#") == 0) {
+                int s = std::stoi(x.substr(3));
+                std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+                int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+                int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+                if (s >= 1 && s <= 6) id(tx).send_hex(build_cmd(v_map[s], c_map[s], e_map[s]));
             }
 
-# ===================== BLE 状态扫描 =====================
+# ===================== BLE 扫描与状态上报 (智能节流 + 双向同步) =====================
 esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
@@ -137,147 +255,475 @@ esp32_ble_tracker:
   on_ble_advertise:
     - then:
         - lambda: |-
-            for (auto &data : x.get_manufacturer_datas()) {
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
               auto &raw = data.data;
-              if (raw.size() < 19) continue;
-              if (raw[0] == 0x81 && raw[1] == 0x53 && raw[2] == 0x01) {
-                char mac_str[13];
-                sprintf(mac_str, "%02X%02X%02X%02X%02X%02X",
-                        raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]);
-                std::string mac = mac_str;
-                uint8_t mode     = raw[11];
-                uint8_t bri      = raw[14];
-                uint8_t ct       = raw[15];
-                uint8_t fan_gear = raw[18];
-                bool light_on = (mode & 0x01);
-                bool fan_on   = !(mode == 0x10 || mode == 0x11);
-                int fan_speed = fan_on ? (fan_gear + 1) : 0;
-                int brt_pct   = (int)round(bri * 100.0 / 255.0);
-                int ct_kelvin = 2700 + (int)round(ct * 3800.0 / 255.0);
-                if (mac == "488027700000") {
-                  id(ct_light).publish_state(light_on);
-                  id(ct_light).publish_brightness(brt_pct);
-                  id(ct_light).publish_color_temperature(ct_kelvin);
-                  id(ct_fan).publish_state(fan_on);
-                  id(ct_fan).publish_speed(fan_speed);
-                } else if (mac == "F0CF2D700000") {
-                  id(cw_light).publish_state(light_on);
-                  id(cw_light).publish_brightness(brt_pct);
-                  id(cw_light).publish_color_temperature(ct_kelvin);
-                  id(cw_fan).publish_state(fan_on);
-                  id(cw_fan).publish_speed(fan_speed);
+              if (raw.size() < 20) continue;
+
+              // ===== Dining 餐厅设备 =====
+              uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
+              for (int i = 2; i <= (int)raw.size() - 6; i++) {
+                if (memcmp(&raw[i], ct_mac, 6) == 0) {
+                  bool light_on = (raw[i + 7] == 0x01);
+                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
+                  uint8_t fan_state = raw[i + 16];
+                  bool fan_run = (fan_state & 0x01) != 0; 
+                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
+
+                  static bool last_light = false, last_fan_run = false;
+                  static int last_brt = -1, last_ct = -1, last_fan_spd = -1;
+                  static uint32_t last_report = 0, last_change = 0;
+                  static uint8_t retry_count = 0;
+
+                  bool changed = (light_on != last_light) || (brt != last_brt) || (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
+                  if (changed) { last_change = millis(); retry_count = 0; last_light = light_on; last_brt = brt; last_ct = ct_k; last_fan_run = fan_run; last_fan_spd = fan_spd; }
+                  bool heartbeat = (millis() - last_report > 60000);
+                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
+
+                  if (changed || heartbeat || retry) {
+                    if (retry) retry_count++; else retry_count = 0;
+                    last_report = millis();
+                    
+                    // 1. 上报给巴法云
+                    if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+                    else id(bemfa).publish("ctlight002/up", "off");
+                    if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
+                    else id(bemfa).publish("ctfan003/up", "off");
+
+                    // 2. 反向同步给 HA 原生 Light 组件
+                    auto light_call = id(ct_light).make_call();
+                    light_call.set_state(light_on);
+                    if (light_on) { light_call.set_brightness(brt / 100.0f); light_call.set_color_temperature(1000000.0f / ct_k); }
+                    light_call.perform();
+
+                    // 3. 反向同步给 HA 原生 Fan 组件
+                    auto fan_call = id(ct_fan).make_call();
+                    fan_call.set_state(fan_run);
+                    if (fan_run) fan_call.set_speed(fan_spd);
+                    fan_call.perform();
+                  }
+                  break;
+                }
+              }
+
+              // ===== Bedroom 次卧设备 =====
+              uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
+              for (int i = 2; i <= (int)raw.size() - 6; i++) {
+                if (memcmp(&raw[i], cw_mac, 6) == 0) {
+                  bool light_on = (raw[i + 7] == 0x01);
+                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
+                  uint8_t fan_state = raw[i + 16];
+                  bool fan_run = (fan_state & 0x01) != 0;
+                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
+
+                  static bool last_light = false, last_fan_run = false;
+                  static int last_brt = -1, last_ct = -1, last_fan_spd = -1;
+                  static uint32_t last_report = 0, last_change = 0;
+                  static uint8_t retry_count = 0;
+
+                  bool changed = (light_on != last_light) || (brt != last_brt) || (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
+                  if (changed) { last_change = millis(); retry_count = 0; last_light = light_on; last_brt = brt; last_ct = ct_k; last_fan_run = fan_run; last_fan_spd = fan_spd; }
+                  bool heartbeat = (millis() - last_report > 60000);
+                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
+
+                  if (changed || heartbeat || retry) {
+                    if (retry) retry_count++; else retry_count = 0;
+                    last_report = millis();
+                    
+                    // 1. 上报给巴法云
+                    if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+                    else id(bemfa).publish("cwlight002/up", "off");
+                    if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
+                    else id(bemfa).publish("cwfan003/up", "off");
+
+                    // 2. 反向同步给 HA 原生 Light 组件
+                    auto light_call = id(cw_light).make_call();
+                    light_call.set_state(light_on);
+                    if (light_on) { light_call.set_brightness(brt / 100.0f); light_call.set_color_temperature(1000000.0f / ct_k); }
+                    light_call.perform();
+
+                    // 3. 反向同步给 HA 原生 Fan 组件
+                    auto fan_call = id(cw_fan).make_call();
+                    fan_call.set_state(fan_run);
+                    if (fan_run) fan_call.set_speed(fan_spd);
+                    fan_call.perform();
+                  }
+                  break;
                 }
               }
             }
 
-# ===================== 原生 Light 组件（新版语法） =====================
+# ===================== 原生灯光组件 (HA 完美支持亮度/色温) =====================
 light:
   - platform: template
-    name: "Dining Light"
+    name: "Dining Light 餐厅灯"
     id: ct_light
-    icon: mdi:ceiling-light
-    effects:
-      - name: "None"
-    on_state:
-      then:
-        - lambda: |-
-            if (id(ct_light).current_values.is_on()) {
-              MideaController ctrl("488027700000");
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else {
-              MideaController ctrl("488027700000");
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            }
-    on_brightness:
-      then:
-        - lambda: |-
-            MideaController ctrl("488027700000");
-            uint8_t br = round(x * 255.0);
-            id(tx).send_hex(ctrl.make_command({0x51, br}, 2, 4));
-    on_color_temperature:
-      then:
-        - lambda: |-
-            MideaController ctrl("488027700000");
-            int kelvin = (int)(1000000.0 / x);
-            uint8_t cv = round((kelvin - 2700.0) * 255.0 / 3800.0);
-            id(tx).send_hex(ctrl.make_command({0x55, cv}, 2, 4));
-    supports_brightness: true
-    supports_color_temperature: true
-    min_mireds: 153
-    max_mireds: 370
+    color_temperature: true
+    brightness: true
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          auto values = id(ct_light).remote_values;
+          int brt = std::round(values.get_brightness() * 100.0f);
+          int ct_k = std::round(1000000.0f / values.get_color_temperature());
+          int brt_val = std::round(brt * 255.0 / 100.0);
+          int temp_val = std::max(0, std::min(255, std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0))));
+          
+          std::string mac = "488027700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
+          id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+    turn_off_action:
+      - lambda: |-
+          std::string mac = "488027700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x06}, 2, 4));
+          id(bemfa).publish("ctlight002/up", "off");
 
   - platform: template
-    name: "Bedroom Light"
+    name: "Bedroom Light 次卧灯"
     id: cw_light
-    icon: mdi:ceiling-light
-    effects:
-      - name: "None"
-    on_state:
-      then:
-        - lambda: |-
-            if (id(cw_light).current_values.is_on()) {
-              MideaController ctrl("F0CF2D700000");
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            } else {
-              MideaController ctrl("F0CF2D700000");
-              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-            }
-    on_brightness:
-      then:
-        - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            uint8_t br = round(x * 255.0);
-            id(tx).send_hex(ctrl.make_command({0x51, br}, 2, 4));
-    on_color_temperature:
-      then:
-        - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            int kelvin = (int)(1000000.0 / x);
-            uint8_t cv = round((kelvin - 2700.0) * 255.0 / 3800.0);
-            id(tx).send_hex(ctrl.make_command({0x55, cv}, 2, 4));
-    supports_brightness: true
-    supports_color_temperature: true
-    min_mireds: 153
-    max_mireds: 370
+    color_temperature: true
+    brightness: true
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          auto values = id(cw_light).remote_values;
+          int brt = std::round(values.get_brightness() * 100.0f);
+          int ct_k = std::round(1000000.0f / values.get_color_temperature());
+          int brt_val = std::round(brt * 255.0 / 100.0);
+          int temp_val = std::max(0, std::min(255, std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0))));
+          
+          std::string mac = "F0CF2D700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
+          id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+    turn_off_action:
+      - lambda: |-
+          std::string mac = "F0CF2D700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x06}, 2, 4));
+          id(bemfa).publish("cwlight002/up", "off");
 
-# ===================== 原生 Fan 组件 =====================
+# ===================== 原生风扇组件 (HA 完美支持 1-6 档) =====================
 fan:
   - platform: template
-    name: "Dining Fan"
+    name: "Dining Fan 餐厅风扇"
     id: ct_fan
-    icon: mdi:fan
     speed_count: 6
-    on_state:
-      then:
-        - lambda: |-
-            MideaController ctrl("488027700000");
-            if (id(ct_fan).state) {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            }
-    on_speed:
-      then:
-        - lambda: |-
-            MideaController ctrl("488027700000");
-            id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(x)));
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          int spd = id(ct_fan).speed; if (spd == 0) spd = 1;
+          std::string mac = "488027700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
+          id(bemfa).publish("ctfan003/up", "on#" + std::to_string(spd));
+    turn_off_action:
+      - lambda: |-
+          std::string mac = "488027700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x09}, 8, 15));
+          id(bemfa).publish("ctfan003/up", "off");
+    on_speed_set:
+      - lambda: |-
+          int spd = id(ct_fan).speed;
+          std::string mac = "488027700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
+          id(bemfa).publish("ctfan003/up", "on#" + std::to_string(spd));
 
   - platform: template
-    name: "Bedroom Fan"
+    name: "Bedroom Fan 次卧风扇"
     id: cw_fan
-    icon: mdi:fan
     speed_count: 6
-    on_state:
-      then:
-        - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            if (id(cw_fan).state) {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            } else {
-              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-            }
-    on_speed:
-      then:
-        - lambda: |-
-            MideaController ctrl("F0CF2D700000");
-            id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(x)));
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          int spd = id(cw_fan).speed; if (spd == 0) spd = 1;
+          std::string mac = "F0CF2D700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
+          id(bemfa).publish("cwfan003/up", "on#" + std::to_string(spd));
+    turn_off_action:
+      - lambda: |-
+          std::string mac = "F0CF2D700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          id(tx).send_hex(build_cmd({0x09}, 8, 15));
+          id(bemfa).publish("cwfan003/up", "off");
+    on_speed_set:
+      - lambda: |-
+          int spd = id(cw_fan).speed;
+          std::string mac = "F0CF2D700000";
+          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
+              uint8_t table[16]; int l=0, r=1;
+              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
+              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
+              auto make_pkt = [&](int flag) {
+                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
+                  for(auto v:vals) chk = (chk+v)&0xFF;
+                  std::vector<uint8_t> p = {ch, ver, cmd_type};
+                  for(auto v:vals) p.push_back(v);
+                  while(p.size()<15) p.push_back(0x00);
+                  p.push_back(chk);
+                  const char* hex = "0123456789ABCDEF";
+                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
+                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
+                  int idx = flag & 0x0F;
+                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
+                  return res;
+              };
+              return make_pkt(cf) + "|" + make_pkt(ef);
+          };
+          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
+          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
+          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
+          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
+          id(bemfa).publish("cwfan003/up", "on#" + std::to_string(spd));
+
+# ===================== 系统状态传感器 =====================
+sensor:
+  - platform: uptime
+    name: "Gateway Uptime 运行时间"
+    id: gateway_uptime
+    update_interval: 60s
+    icon: mdi:timer-outline
+  - platform: internal_temperature
+    name: "ESP32 Temp 芯片温度"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+    icon: mdi:thermometer
+  - platform: wifi_signal
+    name: "WiFi dBm 信号强度"
+    id: wifi_signal_db
+    update_interval: 60s
+    icon: mdi:wifi
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Pct 信号百分比"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    icon: mdi:wifi-strength-4
+
+binary_sensor:
+  - platform: status
+    name: "Gateway Status 网关状态"
+    device_class: connectivity
+
+text_sensor:
+  - platform: template
+    name: "Build Time 编译时间"
+    lambda: 'return {"${build_time}"};'
+    icon: mdi:calendar-clock
+    update_interval: 3600s
+  - platform: version
+    name: "ESPHome Ver 版本"
+    hide_timestamp: true
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP 地址"
+      icon: mdi:ip
+    ssid:
+      name: "ESP SSID WiFi名"
+      icon: mdi:wifi
+    mac_address:
+      name: "ESP MAC 物理地址"
