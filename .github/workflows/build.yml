@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [main, dan]
+    branches: [555]
   workflow_dispatch:
 
 permissions:
