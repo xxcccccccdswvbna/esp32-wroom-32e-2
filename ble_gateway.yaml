@@ -83,7 +83,9 @@ mqtt:
               std::string rest = x.substr(3);
               int brt = atoi(rest.substr(0, rest.find('#')).c_str());
               int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              id(tx).send_hex(ctrl.make_command({0x5B, (uint8_t)round(brt * 255.0 / 100.0), (uint8_t)round((ct - 2700.0) * 255.0 / 3800.0)}, 2, 4));
+              uint8_t br = round(brt * 255.0 / 100.0);
+              uint8_t cv = round((ct - 2700.0) * 255.0 / 3800.0);
+              id(tx).send_hex(ctrl.make_command({0x5B, br, cv}, 2, 4));
             }
     - topic: "ctfan003"
       then:
@@ -109,7 +111,9 @@ mqtt:
               std::string rest = x.substr(3);
               int brt = atoi(rest.substr(0, rest.find('#')).c_str());
               int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              id(tx).send_hex(ctrl.make_command({0x5B, (uint8_t)round(brt * 255.0 / 100.0), (uint8_t)round((ct - 2700.0) * 255.0 / 3800.0)}, 2, 4));
+              uint8_t br = round(brt * 255.0 / 100.0);
+              uint8_t cv = round((ct - 2700.0) * 255.0 / 3800.0);
+              id(tx).send_hex(ctrl.make_command({0x5B, br, cv}, 2, 4));
             }
     - topic: "cwfan003"
       then:
@@ -166,63 +170,75 @@ esp32_ble_tracker:
               }
             }
 
-# ===================== 原生 Light 组件 =====================
+# ===================== 原生 Light 组件（新版语法） =====================
 light:
   - platform: template
     name: "Dining Light"
     id: ct_light
     icon: mdi:ceiling-light
+    effects:
+      - name: "None"
+    on_state:
+      then:
+        - lambda: |-
+            if (id(ct_light).current_values.is_on()) {
+              MideaController ctrl("488027700000");
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
+            } else {
+              MideaController ctrl("488027700000");
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
+            }
+    on_brightness:
+      then:
+        - lambda: |-
+            MideaController ctrl("488027700000");
+            uint8_t br = round(x * 255.0);
+            id(tx).send_hex(ctrl.make_command({0x51, br}, 2, 4));
+    on_color_temperature:
+      then:
+        - lambda: |-
+            MideaController ctrl("488027700000");
+            int kelvin = (int)(1000000.0 / x);
+            uint8_t cv = round((kelvin - 2700.0) * 255.0 / 3800.0);
+            id(tx).send_hex(ctrl.make_command({0x55, cv}, 2, 4));
     supports_brightness: true
     supports_color_temperature: true
     min_mireds: 153
     max_mireds: 370
-    turn_on_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-    turn_off_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-    brightness_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          uint8_t brt = round(brightness * 255.0);
-          id(tx).send_hex(ctrl.make_command({0x51, brt}, 2, 4));
-    color_temperature_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          int kelvin = (int)(1000000.0 / color_temperature);
-          uint8_t ct_val = round((kelvin - 2700.0) * 255.0 / 3800.0);
-          id(tx).send_hex(ctrl.make_command({0x55, ct_val}, 2, 4));
 
   - platform: template
     name: "Bedroom Light"
     id: cw_light
     icon: mdi:ceiling-light
+    effects:
+      - name: "None"
+    on_state:
+      then:
+        - lambda: |-
+            if (id(cw_light).current_values.is_on()) {
+              MideaController ctrl("F0CF2D700000");
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
+            } else {
+              MideaController ctrl("F0CF2D700000");
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
+            }
+    on_brightness:
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            uint8_t br = round(x * 255.0);
+            id(tx).send_hex(ctrl.make_command({0x51, br}, 2, 4));
+    on_color_temperature:
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            int kelvin = (int)(1000000.0 / x);
+            uint8_t cv = round((kelvin - 2700.0) * 255.0 / 3800.0);
+            id(tx).send_hex(ctrl.make_command({0x55, cv}, 2, 4));
     supports_brightness: true
     supports_color_temperature: true
     min_mireds: 153
     max_mireds: 370
-    turn_on_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-    turn_off_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
-    brightness_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          uint8_t brt = round(brightness * 255.0);
-          id(tx).send_hex(ctrl.make_command({0x51, brt}, 2, 4));
-    color_temperature_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          int kelvin = (int)(1000000.0 / color_temperature);
-          uint8_t ct_val = round((kelvin - 2700.0) * 255.0 / 3800.0);
-          id(tx).send_hex(ctrl.make_command({0x55, ct_val}, 2, 4));
 
 # ===================== 原生 Fan 组件 =====================
 fan:
@@ -231,33 +247,37 @@ fan:
     id: ct_fan
     icon: mdi:fan
     speed_count: 6
-    turn_on_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-    turn_off_action:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-    on_speed_set:
-      - lambda: |-
-          MideaController ctrl("488027700000");
-          id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(speed)));
+    on_state:
+      then:
+        - lambda: |-
+            MideaController ctrl("488027700000");
+            if (id(ct_fan).state) {
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+            } else {
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+            }
+    on_speed:
+      then:
+        - lambda: |-
+            MideaController ctrl("488027700000");
+            id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(x)));
 
   - platform: template
     name: "Bedroom Fan"
     id: cw_fan
     icon: mdi:fan
     speed_count: 6
-    turn_on_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-    turn_off_action:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
-    on_speed_set:
-      - lambda: |-
-          MideaController ctrl("F0CF2D700000");
-          id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(speed)));
+    on_state:
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            if (id(cw_fan).state) {
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+            } else {
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+            }
+    on_speed:
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(x)));
