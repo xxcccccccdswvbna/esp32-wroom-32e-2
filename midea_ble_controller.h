@@ -51,8 +51,9 @@ inline std::string midea_build_cmd(const std::string &mac,
 
 // ========== 灯光命令 ==========
 // LED 开关：控制 flag=8, 结束 flag=8
+// LED 开关：修正为控制 flag=2, 结束 flag=4
 inline std::string midea_light_toggle(const std::string &mac) {
-    return midea_build_cmd(mac, {0x06}, 8, 8);
+    return midea_build_cmd(mac, {0x06}, 2, 4);  // 改这里！
 }
 
 // 亮度：控制 flag=2, 结束 flag=4
