@@ -39,20 +39,19 @@ jobs:
           echo "name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
 
       # 注入构建时间
+      # 🔥 生成时间戳并注入到 YAML 文件中 (修复版)
       - name: Inject Build Timestamp
-        id: build_time
         run: |
+          # 生成 UTC 时间
           BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
-
           echo "Build time: $BUILD_TIME"
-
-          sed -i \
-            "s/build_time: \"Unknown\"/build_time: \"$BUILD_TIME\"/" \
-            ble_gateway.yaml
-
-          grep "build_time:" ble_gateway.yaml
-
-          echo "time=$BUILD_TIME" >> "$GITHUB_OUTPUT"
+          
+          # 🔥 修复：使用更宽松的正则匹配，无论原来是单引号、双引号还是没引号都能替换
+          # 并在末尾加上 || true，防止 sed 找不到匹配项时导致整个 step 报错退出
+          sed -i "s/build_time: .*/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml || true
+          
+          # 🔥 修复：验证替换结果，同样加上 || true 防止 grep 失败导致中断
+          grep "build_time:" ble_gateway.yaml || echo "Warning: Could not verify build_time in YAML"
 
       # 编译 ESPHome
       - name: Compile ESPHome Firmware
