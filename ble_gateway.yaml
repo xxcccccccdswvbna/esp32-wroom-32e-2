@@ -7,6 +7,8 @@ esphome:
   name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
+  includes:
+    - midea_ble_controller.h
 
 esp32:
   board: esp32dev
@@ -52,12 +54,12 @@ ble_tx:
 esp32_ble:
   io_capability: none
   enable_on_boot: true
-  
+
 bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云 MQTT =====================
+# ===================== MQTT (巴法云) 保留，用于小爱等 =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -71,35 +73,220 @@ mqtt:
   will_message:
   on_message:
     # ==========================================================
-    #  餐厅灯 (ctlight002)
+    #  餐厅灯 (MQTT 通道，供小爱调用)
     # ==========================================================
     - topic: "ctlight002"
       then:
         - lambda: |-
+            MideaController ctrl("488027700000");
             if (x == "on") {
-              id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");
-            }
-            else if (x == "off") {
-              id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");
-            }
-            else if (x.find("on#") == 0) {
+              ctrl.send_light_toggle(id(tx));
+            } else if (x == "off") {
+              ctrl.send_light_toggle(id(tx));
+            } else if (x.find("on#") == 0) {
               std::string rest = x.substr(3);
-              int v = atoi(rest.c_str());
-              size_t p2 = rest.find('#');
-              
-              if (p2 != std::string::npos) {
-                int k = atoi(rest.substr(p2 + 1).c_str());
-                if (k <= 3100) {
-                  id(tx).send_hex("0201021BFF114D1917488027700000018181C227277070005FC86FB84848FF|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
+              int brt = atoi(rest.substr(0, rest.find('#')).c_str());
+              int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
+              ctrl.send_light_brightness_color(id(tx), brt, ct);
+            }
+
+    # ==========================================================
+    #  餐厅风扇 (MQTT)
+    # ==========================================================
+    - topic: "ctfan003"
+      then:
+        - lambda: |-
+            MideaController ctrl("488027700000");
+            if (x == "on") {
+              ctrl.send_fan_toggle(id(tx));
+            } else if (x == "off") {
+              ctrl.send_fan_toggle(id(tx));
+            } else if (x.find("on#") == 0) {
+              int speed = atoi(x.substr(3).c_str());
+              ctrl.send_fan_speed(id(tx), speed);
+            }
+
+    # ==========================================================
+    #  次卧灯 (MQTT)
+    # ==========================================================
+    - topic: "cwlight002"
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            if (x == "on") {
+              ctrl.send_light_toggle(id(tx));
+            } else if (x == "off") {
+              ctrl.send_light_toggle(id(tx));
+            } else if (x.find("on#") == 0) {
+              std::string rest = x.substr(3);
+              int brt = atoi(rest.substr(0, rest.find('#')).c_str());
+              int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
+              ctrl.send_light_brightness_color(id(tx), brt, ct);
+            }
+
+    # ==========================================================
+    #  次卧风扇 (MQTT)
+    # ==========================================================
+    - topic: "cwfan003"
+      then:
+        - lambda: |-
+            MideaController ctrl("F0CF2D700000");
+            if (x == "on") {
+              ctrl.send_fan_toggle(id(tx));
+            } else if (x == "off") {
+              ctrl.send_fan_toggle(id(tx));
+            } else if (x.find("on#") == 0) {
+              int speed = atoi(x.substr(3).c_str());
+              ctrl.send_fan_speed(id(tx), speed);
+            }
+
+# ===================== 状态扫描（通用 8153 解析） =====================
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 640ms
+    window: 30ms
+    active: false
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            for (auto &data : x.get_manufacturer_datas()) {
+                auto &raw = data.data;
+                if (raw.size() < 19) continue;
+
+                if (raw[0] == 0x81 && raw[1] == 0x53 && raw[2] == 0x01) {
+                    char mac_str[13];
+                    sprintf(mac_str, "%02X%02X%02X%02X%02X%02X",
+                            raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]);
+                    std::string mac = mac_str;
+
+                    uint8_t mode     = raw[11];
+                    uint8_t bri      = raw[14];
+                    uint8_t ct       = raw[15];
+                    uint8_t fan_gear = raw[18];
+
+                    bool light_on = (mode & 0x01);
+                    bool fan_on   = !(mode == 0x10 || mode == 0x11);
+                    int fan_speed = fan_on ? (fan_gear + 1) : 0;
+                    int brt_pct   = (int)round(bri * 100.0 / 255.0);
+                    int ct_kelvin = 2700 + (int)round(ct * (6500.0 - 2700.0) / 255.0);
+
+                    // 餐厅
+                    if (mac == "488027700000") {
+                        id(ct_light).publish_state(light_on);
+                        id(ct_light).publish_brightness(brt_pct);
+                        id(ct_light).publish_color_temperature(ct_kelvin);
+                        id(ct_fan).publish_state(fan_on);
+                        id(ct_fan).publish_speed(fan_speed);
+                        // 同步 MQTT 上报（可选）
+                        if (light_on)
+                            id(bemfa).publish("ctlight002/up", ("on#" + to_string(brt_pct) + "#" + to_string(ct_kelvin)).c_str());
+                        else
+                            id(bemfa).publish("ctlight002/up", "off");
+                        if (fan_on)
+                            id(bemfa).publish("ctfan003/up", ("on#" + to_string(fan_speed)).c_str());
+                        else
+                            id(bemfa).publish("ctfan003/up", "off");
+                    }
+                    // 次卧
+                    else if (mac == "F0CF2D700000") {
+                        id(cw_light).publish_state(light_on);
+                        id(cw_light).publish_brightness(brt_pct);
+                        id(cw_light).publish_color_temperature(ct_kelvin);
+                        id(cw_fan).publish_state(fan_on);
+                        id(cw_fan).publish_speed(fan_speed);
+                        if (light_on)
+                            id(bemfa).publish("cwlight002/up", ("on#" + to_string(brt_pct) + "#" + to_string(ct_kelvin)).c_str());
+                        else
+                            id(bemfa).publish("cwlight002/up", "off");
+                        if (fan_on)
+                            id(bemfa).publish("cwfan003/up", ("on#" + to_string(fan_speed)).c_str());
+                        else
+                            id(bemfa).publish("cwfan003/up", "off");
+                    }
                 }
-                else if (k <= 5000) {
-                  id(tx).send_hex("0201021BFF114D191248802770000001B9491DDDF080809727277070005F1A|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
-                }
-                else {
-                  id(tx).send_hex("0201021BFF114D1917488027700000018181C2D8277070005FC86FB84848F0|0201021BFF114D191A4880277000000126277070005FC86FB84848A7F08082");
-                }
-              }
-              
+            }
+
+# ===================== 原生 Light 组件 =====================
+light:
+  # 餐厅灯
+  - platform: template
+    name: "Dining Light"
+    id: ct_light
+    icon: mdi:ceiling-light
+    supports_brightness: true
+    supports_color_temperature: true
+    min_mireds: 153   # 6500K -> 153 mireds
+    max_mireds: 370   # 2700K -> 370 mireds
+    turn_on_action:
+      - lambda: |-
+          MideaController("488027700000").send_light_toggle(id(tx));
+    turn_off_action:
+      - lambda: |-
+          MideaController("488027700000").send_light_toggle(id(tx));
+    brightness_action:
+      - lambda: |-
+          MideaController("488027700000").send_light_brightness(id(tx), static_cast<int>(brightness * 100.0));
+    color_temperature_action:
+      - lambda: |-
+          int kelvin = static_cast<int>(1000000.0 / color_temperature);
+          MideaController("488027700000").send_light_color_temp(id(tx), kelvin);
+
+  # 次卧灯
+  - platform: template
+    name: "Bedroom Light"
+    id: cw_light
+    icon: mdi:ceiling-light
+    supports_brightness: true
+    supports_color_temperature: true
+    min_mireds: 153
+    max_mireds: 370
+    turn_on_action:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_light_toggle(id(tx));
+    turn_off_action:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_light_toggle(id(tx));
+    brightness_action:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_light_brightness(id(tx), static_cast<int>(brightness * 100.0));
+    color_temperature_action:
+      - lambda: |-
+          int kelvin = static_cast<int>(1000000.0 / color_temperature);
+          MideaController("F0CF2D700000").send_light_color_temp(id(tx), kelvin);
+
+# ===================== 原生 Fan 组件 =====================
+fan:
+  # 餐厅风扇
+  - platform: template
+    name: "Dining Fan"
+    id: ct_fan
+    icon: mdi:fan
+    speed_count: 6
+    on_speed_set:
+      - lambda: |-
+          MideaController("488027700000").send_fan_speed(id(tx), static_cast<int>(speed));
+    turn_on_action:
+      - lambda: |-
+          MideaController("488027700000").send_fan_toggle(id(tx));
+    turn_off_action:
+      - lambda: |-
+          MideaController("488027700000").send_fan_toggle(id(tx));
+
+  # 次卧风扇
+  - platform: template
+    name: "Bedroom Fan"
+    id: cw_fan
+    icon: mdi:fan
+    speed_count: 6
+    on_speed_set:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_fan_speed(id(tx), static_cast<int>(speed));
+    turn_on_action:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_fan_toggle(id(tx));
+    turn_off_action:
+      - lambda: |-
+          MideaController("F0CF2D700000").send_fan_toggle(id(tx));              
               if (v <= 10) {
                 id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
               }
