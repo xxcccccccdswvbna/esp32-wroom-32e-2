@@ -7,6 +7,8 @@ esphome:
   name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
+  includes:
+    - midea_ble_controller.h
 
 esp32:
   board: esp32dev
@@ -56,7 +58,7 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云 MQTT (直连，完整保留) =====================
+# ===================== 巴法云 MQTT =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -69,178 +71,56 @@ mqtt:
   birth_message:
   will_message:
   on_message:
-    # === 餐厅灯 ===
     - topic: "ctlight002"
       then:
         - lambda: |-
-            std::string mac = "488027700000";
-            auto build = [&](std::vector<uint8_t> v, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-              uint8_t tb[16]; int l=0,r=1;
-              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-              auto pkt=[&](int fl)->std::string{
-                uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-                for(auto x:v)ck=(ck+x)&0xFF;
-                std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-                for(auto x:v) p.push_back(x);
-                while(p.size()<15) p.push_back(0); p.push_back(ck);
-                const char*H="0123456789ABCDEF";
-                auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-                int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
-                return s;
-              };
-              return pkt(cf)+"|"+pkt(ef);
-            };
-            
-            if(x=="on"||x=="off") {
-              std::vector<uint8_t> v; v.push_back(0x06);
-              id(tx).send_hex(build(v, 2, 4));
-            }
-            else if(x.find("on#")==0) {
-              std::string rest=x.substr(3); int v_val=std::stoi(rest);
-              size_t p2=rest.find('#'); int ck=4500;
-              if(p2!=std::string::npos){
-                int k=std::stoi(rest.substr(p2+1));
-                if(k>10000) ck=4500;
-                else if(k<=100) ck=2700+(6500-2700)*k/100;
-                else ck=k;
-              }
-              int bv=std::round(v_val*255.0/100.0);
-              int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
-              std::vector<uint8_t> v; v.push_back(0x5B); v.push_back((uint8_t)bv); v.push_back((uint8_t)tv);
-              id(tx).send_hex(build(v, 2, 4));
+            if(x == "on" || x == "off") {
+              id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));
+            } else if(x.find("on#") == 0) {
+              std::string rest = x.substr(3);
+              int brt = std::stoi(rest.substr(0, rest.find('#')));
+              int ct = std::stoi(rest.substr(rest.find('#') + 1));
+              uint8_t bv = midea_pct_to_val(brt);
+              uint8_t tv = midea_kelvin_to_val(ct);
+              id(tx).send_hex(midea_build_cmd("488027700000", {0x5B, bv, tv}, 2, 4));
             }
 
-    # === 餐厅风扇 ===
     - topic: "ctfan003"
       then:
         - lambda: |-
-            std::string mac = "488027700000";
-            auto build = [&](std::vector<uint8_t> v, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-              uint8_t tb[16]; int l=0,r=1;
-              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-              auto pkt=[&](int fl)->std::string{
-                uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-                for(auto x:v)ck=(ck+x)&0xFF;
-                std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-                for(auto x:v) p.push_back(x);
-                while(p.size()<15) p.push_back(0); p.push_back(ck);
-                const char*H="0123456789ABCDEF";
-                auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-                int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
-                return s;
-              };
-              return pkt(cf)+"|"+pkt(ef);
-            };
-            
-            if(x=="on"||x=="off") {
-              std::vector<uint8_t> v; v.push_back(0x09);
-              id(tx).send_hex(build(v, 8, 15));
-            }
-            else if(x.find("on#")==0) {
-              int s=std::stoi(x.substr(3));
-              uint8_t cmd=0x19; int cf=10, ef=7;
-              if(s==1) { cmd=0x19; cf=10; ef=7; }
-              else if(s==2) { cmd=0x1A; cf=0; ef=5; }
-              else if(s==3) { cmd=0x81; cf=13; ef=5; }
-              else if(s==4) { cmd=0x88; cf=8; ef=12; }
-              else if(s==5) { cmd=0x85; cf=10; ef=12; }
-              else if(s==6) { cmd=0x86; cf=5; ef=1; }
-              
-              std::vector<uint8_t> v; v.push_back(cmd);
-              id(tx).send_hex(build(v, cf, ef));
+            if(x == "on" || x == "off") {
+              id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));
+            } else if(x.find("on#") == 0) {
+              int s = std::stoi(x.substr(3));
+              uint8_t cmd; int cf, ef;
+              midea_fan_params(s, cmd, cf, ef);
+              id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
             }
 
-    # === 次卧灯 ===
     - topic: "cwlight002"
       then:
         - lambda: |-
-            std::string mac = "F0CF2D700000";
-            auto build = [&](std::vector<uint8_t> v, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-              uint8_t tb[16]; int l=0,r=1;
-              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-              auto pkt=[&](int fl)->std::string{
-                uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-                for(auto x:v)ck=(ck+x)&0xFF;
-                std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-                for(auto x:v) p.push_back(x);
-                while(p.size()<15) p.push_back(0); p.push_back(ck);
-                const char*H="0123456789ABCDEF";
-                auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-                int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
-                return s;
-              };
-              return pkt(cf)+"|"+pkt(ef);
-            };
-            
-            if(x=="on"||x=="off") {
-              std::vector<uint8_t> v; v.push_back(0x06);
-              id(tx).send_hex(build(v, 2, 4));
-            }
-            else if(x.find("on#")==0) {
-              std::string rest=x.substr(3); int v_val=std::stoi(rest);
-              size_t p2=rest.find('#'); int ck=4500;
-              if(p2!=std::string::npos){
-                int k=std::stoi(rest.substr(p2+1));
-                if(k>10000) ck=4500;
-                else if(k<=100) ck=2700+(6500-2700)*k/100;
-                else ck=k;
-              }
-              int bv=std::round(v_val*255.0/100.0);
-              int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
-              std::vector<uint8_t> v; v.push_back(0x5B); v.push_back((uint8_t)bv); v.push_back((uint8_t)tv);
-              id(tx).send_hex(build(v, 2, 4));
+            if(x == "on" || x == "off") {
+              id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));
+            } else if(x.find("on#") == 0) {
+              std::string rest = x.substr(3);
+              int brt = std::stoi(rest.substr(0, rest.find('#')));
+              int ct = std::stoi(rest.substr(rest.find('#') + 1));
+              uint8_t bv = midea_pct_to_val(brt);
+              uint8_t tv = midea_kelvin_to_val(ct);
+              id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x5B, bv, tv}, 2, 4));
             }
 
-    # === 次卧风扇 ===
     - topic: "cwfan003"
       then:
         - lambda: |-
-            std::string mac = "F0CF2D700000";
-            auto build = [&](std::vector<uint8_t> v, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-              uint8_t tb[16]; int l=0,r=1;
-              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-              auto pkt=[&](int fl)->std::string{
-                uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-                for(auto x:v)ck=(ck+x)&0xFF;
-                std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-                for(auto x:v) p.push_back(x);
-                while(p.size()<15) p.push_back(0); p.push_back(ck);
-                const char*H="0123456789ABCDEF";
-                auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-                int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
-                return s;
-              };
-              return pkt(cf)+"|"+pkt(ef);
-            };
-            
-            if(x=="on"||x=="off") {
-              std::vector<uint8_t> v; v.push_back(0x09);
-              id(tx).send_hex(build(v, 8, 15));
-            }
-            else if(x.find("on#")==0) {
-              int s=std::stoi(x.substr(3));
-              uint8_t cmd=0x19; int cf=10, ef=7;
-              if(s==1) { cmd=0x19; cf=10; ef=7; }
-              else if(s==2) { cmd=0x1A; cf=0; ef=5; }
-              else if(s==3) { cmd=0x81; cf=13; ef=5; }
-              else if(s==4) { cmd=0x88; cf=8; ef=12; }
-              else if(s==5) { cmd=0x85; cf=10; ef=12; }
-              else if(s==6) { cmd=0x86; cf=5; ef=1; }
-              
-              std::vector<uint8_t> v; v.push_back(cmd);
-              id(tx).send_hex(build(v, cf, ef));
+            if(x == "on" || x == "off") {
+              id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));
+            } else if(x.find("on#") == 0) {
+              int s = std::stoi(x.substr(3));
+              uint8_t cmd; int cf, ef;
+              midea_fan_params(s, cmd, cf, ef);
+              id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
             }
 
 # ===================== BLE 扫描与状态上报 =====================
@@ -267,8 +147,8 @@ esp32_ble_tracker:
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
 
-                  static bool ll=false,lfr=false; static int lb=-1,lc=-1,lfs=-1;
-                  static uint32_t lr=0,lch=0; static uint8_t rc=0;
+                  static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
+                  static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
                   if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
                   bool hb=(millis()-lr>60000);
@@ -286,6 +166,18 @@ esp32_ble_tracker:
                     id(ct_spd_s).publish_state(fan_spd);
                     id(ct_light_sw).publish_state(light_on);
                     id(ct_fan_sw).publish_state(fan_run);
+                    // 🔥 同步原生 light/fan 组件状态
+                    auto lc = id(ct_light).make_call();
+                    lc.set_state(light_on);
+                    if(light_on) {
+                      lc.set_brightness(brt/100.0f);
+                      lc.set_color_temperature(1000000.0f/ct_k);
+                    }
+                    lc.perform();
+                    auto fc = id(ct_fan).make_call();
+                    fc.set_state(fan_run);
+                    if(fan_run) fc.set_speed(fan_spd);
+                    fc.perform();
                   }
                   break;
                 }
@@ -301,8 +193,8 @@ esp32_ble_tracker:
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
 
-                  static bool ll=false,lfr=false; static int lb=-1,lc=-1,lfs=-1;
-                  static uint32_t lr=0,lch=0; static uint8_t rc=0;
+                  static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
+                  static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
                   if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
                   bool hb=(millis()-lr>60000);
@@ -320,13 +212,113 @@ esp32_ble_tracker:
                     id(cw_spd_s).publish_state(fan_spd);
                     id(cw_light_sw).publish_state(light_on);
                     id(cw_fan_sw).publish_state(fan_run);
+                    // 🔥 同步原生 light/fan 组件状态
+                    auto lc = id(cw_light).make_call();
+                    lc.set_state(light_on);
+                    if(light_on) {
+                      lc.set_brightness(brt/100.0f);
+                      lc.set_color_temperature(1000000.0f/ct_k);
+                    }
+                    lc.perform();
+                    auto fc = id(cw_fan).make_call();
+                    fc.set_state(fan_run);
+                    if(fan_run) fc.set_speed(fan_spd);
+                    fc.perform();
                   }
                   break;
                 }
               }
             }
 
-# ===================== 开关 (动态算法) =====================
+# ===================== 原生 Light 组件 =====================
+light:
+  - platform: template
+    name: "Dining Light 餐厅灯"
+    id: ct_light
+    color_temperature: true
+    brightness: true
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          auto vals = id(ct_light).remote_values;
+          int brt_pct = std::round(vals.get_brightness() * 100.0f);
+          int ct_k = std::round(1000000.0f / vals.get_color_temperature());
+          uint8_t bv = midea_pct_to_val(brt_pct);
+          uint8_t tv = midea_kelvin_to_val(ct_k);
+          id(tx).send_hex(midea_build_cmd("488027700000", {0x5B, bv, tv}, 2, 4));
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));
+
+  - platform: template
+    name: "Bedroom Light 次卧灯"
+    id: cw_light
+    color_temperature: true
+    brightness: true
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          auto vals = id(cw_light).remote_values;
+          int brt_pct = std::round(vals.get_brightness() * 100.0f);
+          int ct_k = std::round(1000000.0f / vals.get_color_temperature());
+          uint8_t bv = midea_pct_to_val(brt_pct);
+          uint8_t tv = midea_kelvin_to_val(ct_k);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x5B, bv, tv}, 2, 4));
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));
+
+# ===================== 原生 Fan 组件 =====================
+fan:
+  - platform: template
+    name: "Dining Fan 餐厅风扇"
+    id: ct_fan
+    speed_count: 6
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          int spd = id(ct_fan).speed;
+          if(spd == 0) spd = 1;
+          uint8_t cmd; int cf, ef;
+          midea_fan_params(spd, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));
+    on_speed_set:
+      - lambda: |-
+          int spd = id(ct_fan).speed;
+          uint8_t cmd; int cf, ef;
+          midea_fan_params(spd, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
+
+  - platform: template
+    name: "Bedroom Fan 次卧风扇"
+    id: cw_fan
+    speed_count: 6
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          int spd = id(cw_fan).speed;
+          if(spd == 0) spd = 1;
+          uint8_t cmd; int cf, ef;
+          midea_fan_params(spd, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
+    turn_off_action:
+      - lambda: |-
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));
+    on_speed_set:
+      - lambda: |-
+          int spd = id(cw_fan).speed;
+          uint8_t cmd; int cf, ef;
+          midea_fan_params(spd, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
+
+# ===================== 开关 =====================
 switch:
   - platform: template
     name: "Dining Light SW"
@@ -335,37 +327,9 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x06);
-          id(tx).send_hex(build(v, 2, 4));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));'
     turn_off_action:
-      - lambda: |-
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x06);
-          id(tx).send_hex(build(v, 2, 4));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));'
     lambda: 'return id(ct_light_st).state;'
 
   - platform: template
@@ -375,37 +339,9 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x09);
-          id(tx).send_hex(build(v, 8, 15));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));'
     turn_off_action:
-      - lambda: |-
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x09);
-          id(tx).send_hex(build(v, 8, 15));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));'
     lambda: 'return id(ct_fan_st).state;'
 
   - platform: template
@@ -415,37 +351,9 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x06);
-          id(tx).send_hex(build(v, 2, 4));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));'
     turn_off_action:
-      - lambda: |-
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x06);
-          id(tx).send_hex(build(v, 2, 4));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));'
     lambda: 'return id(cw_light_st).state;'
 
   - platform: template
@@ -455,213 +363,10 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: |-
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x09);
-          id(tx).send_hex(build(v, 8, 15));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));'
     turn_off_action:
-      - lambda: |-
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x09);
-          id(tx).send_hex(build(v, 8, 15));
+      - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));'
     lambda: 'return id(cw_fan_st).state;'
-
-# ===================== 数值滑块 (亮度/色温/档位) =====================
-number:
-  - platform: template
-    name: "Dining Brightness"
-    id: ct_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          int brt=(int)x; int bv=std::round(brt*255.0/100.0);
-          int tv=std::round((4500.0-2700.0)*255.0/3800.0);
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x51); v.push_back((uint8_t)bv);
-          id(tx).send_hex(build(v, 2, 4));
-
-  - platform: template
-    name: "Dining ColorTemp"
-    id: ct_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          int ck=(int)x;
-          int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x55); v.push_back((uint8_t)tv);
-          id(tx).send_hex(build(v, 2, 4));
-
-  - platform: template
-    name: "Dining Fan Speed"
-    id: ct_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          int s=(int)x;
-          uint8_t cmd=0x19; int cf=10, ef=7;
-          if(s==1) { cmd=0x19; cf=10; ef=7; }
-          else if(s==2) { cmd=0x1A; cf=0; ef=5; }
-          else if(s==3) { cmd=0x81; cf=13; ef=5; }
-          else if(s==4) { cmd=0x88; cf=8; ef=12; }
-          else if(s==5) { cmd=0x85; cf=10; ef=12; }
-          else if(s==6) { cmd=0x86; cf=5; ef=1; }
-          
-          std::string mac="488027700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(cmd);
-          id(tx).send_hex(build(v, cf, ef));
-
-  - platform: template
-    name: "Bedroom Brightness"
-    id: cw_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          int brt=(int)x; int bv=std::round(brt*255.0/100.0);
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x51); v.push_back((uint8_t)bv);
-          id(tx).send_hex(build(v, 2, 4));
-
-  - platform: template
-    name: "Bedroom ColorTemp"
-    id: cw_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          int ck=(int)x;
-          int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(0x55); v.push_back((uint8_t)tv);
-          id(tx).send_hex(build(v, 2, 4));
-
-  - platform: template
-    name: "Bedroom Fan Speed"
-    id: cw_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          int s=(int)x;
-          uint8_t cmd=0x19; int cf=10, ef=7;
-          if(s==1) { cmd=0x19; cf=10; ef=7; }
-          else if(s==2) { cmd=0x1A; cf=0; ef=5; }
-          else if(s==3) { cmd=0x81; cf=13; ef=5; }
-          else if(s==4) { cmd=0x88; cf=8; ef=12; }
-          else if(s==5) { cmd=0x85; cf=10; ef=12; }
-          else if(s==6) { cmd=0x86; cf=5; ef=1; }
-          
-          std::string mac="F0CF2D700000";
-          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
-            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
-            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
-            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
-            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
-              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p; p.push_back(ch); p.push_back(ver); p.push_back(ct);
-              for(auto x:v)p.push_back(x); while(p.size()<15)p.push_back(0); p.push_back(ck);
-              const char*H="0123456789ABCDEF"; auto th=[&](uint8_t b){ std::string res=""; res+=H[b>>4]; res+=H[b&0xF]; return res; };
-              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
-              int idx=fl&0xF; for(size_t i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;} return s;};
-            return pkt(cf)+"|"+pkt(ef);};
-          std::vector<uint8_t> v; v.push_back(cmd);
-          id(tx).send_hex(build(v, cf, ef));
 
 # ===================== 传感器 =====================
 sensor:
