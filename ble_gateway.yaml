@@ -18,7 +18,6 @@ esp32:
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 
-# ===================== 系统基础 =====================
 logger:
   baud_rate: 0
   level: INFO
@@ -57,7 +56,7 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 巴法云 MQTT (直连) =====================
+# ===================== 巴法云 MQTT (直连，完整保留) =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -70,183 +69,125 @@ mqtt:
   birth_message:
   will_message:
   on_message:
-    # ==========================================================
-    #  餐厅灯 (ctlight002) - 动态算法生成
-    # ==========================================================
+    # === 餐厅灯 ===
     - topic: "ctlight002"
       then:
         - lambda: |-
             std::string mac = "488027700000";
-            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
-                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-                uint8_t table[16]; int l=0, r=1;
-                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-                
-                auto make_pkt = [&](int flag) {
-                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                    for(auto v:values) chk = (chk+v)&0xFF;
-                    std::vector<uint8_t> p = {ch, ver, cmd_type};
-                    for(auto v:values) p.push_back(v);
-                    while(p.size()<15) p.push_back(0x00);
-                    p.push_back(chk);
-                    const char* hex = "0123456789ABCDEF";
-                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                    int idx = flag & 0x0F;
-                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                    return res;
-                };
-                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
-            };
+            auto build = [&](std::vector<uint8_t> vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+              uint8_t tb[16]; int l=0,r=1;
+              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+              auto pkt=[&](int fl)->std::string{
+                uint8_t ch=1,ver=1,ct=(vals.size()>1)?1:0,ck=(ch+ver+ct);
+                for(auto v:vals)ck=(ck+v)&0xFF;
+                std::vector<uint8_t> p={ch,ver,ct};for(auto v:vals)p.push_back(v);
+                while(p.size()<15)p.push_back(0);p.push_back(ck);
+                const char*H="0123456789ABCDEF";
+                auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+                int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
+                return s;};
+              return pkt(cf)+"|"+pkt(ef);};
+            if(x=="on"||x=="off") id(tx).send_hex(build({0x06},2,4));
+            else if(x.find("on#")==0){
+              std::string rest=x.substr(3);int v=std::stoi(rest);
+              size_t p2=rest.find('#');int ck=4500;
+              if(p2!=std::string::npos){int k=std::stoi(rest.substr(p2+1));
+                if(k>10000)ck=4500;else if(k<=100)ck=2700+(6500-2700)*k/100;else ck=k;}
+              int bv=std::round(v*255.0/100.0);
+              int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
+              id(tx).send_hex(build({0x5B,(uint8_t)bv,(uint8_t)tv},2,4));}
 
-            if (x == "on") id(tx).send_hex(build_cmd({0x06}, 2, 4));
-            else if (x == "off") id(tx).send_hex(build_cmd({0x06}, 2, 4));
-            else if (x.find("on#") == 0) {
-                std::string rest = x.substr(3);
-                int v = std::stoi(rest);
-                size_t p2 = rest.find('#');
-                int ct_k = 4500;
-                if (p2 != std::string::npos) {
-                    int k = std::stoi(rest.substr(p2 + 1));
-                    if (k > 10000) ct_k = 4500;
-                    else if (k <= 100) ct_k = 2700 + (6500 - 2700) * k / 100;
-                    else ct_k = k;
-                }
-                int brt_val = std::round(v * 255.0 / 100.0);
-                int temp_val = std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0));
-                temp_val = std::max(0, std::min(255, temp_val));
-                id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
-            }
-
-    # ==========================================================
-    #  餐厅风扇 (ctfan003) - 动态算法生成
-    # ==========================================================
+    # === 餐厅风扇 ===
     - topic: "ctfan003"
       then:
         - lambda: |-
             std::string mac = "488027700000";
-            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
-                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-                uint8_t table[16]; int l=0, r=1;
-                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-                
-                auto make_pkt = [&](int flag) {
-                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                    for(auto v:values) chk = (chk+v)&0xFF;
-                    std::vector<uint8_t> p = {ch, ver, cmd_type};
-                    for(auto v:values) p.push_back(v);
-                    while(p.size()<15) p.push_back(0x00);
-                    p.push_back(chk);
-                    const char* hex = "0123456789ABCDEF";
-                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                    int idx = flag & 0x0F;
-                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                    return res;
-                };
-                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
-            };
+            auto build = [&](std::vector<uint8_t> vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+              uint8_t tb[16]; int l=0,r=1;
+              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+              auto pkt=[&](int fl)->std::string{
+                uint8_t ch=1,ver=1,ct=(vals.size()>1)?1:0,ck=(ch+ver+ct);
+                for(auto v:vals)ck=(ck+v)&0xFF;
+                std::vector<uint8_t> p={ch,ver,ct};for(auto v:vals)p.push_back(v);
+                while(p.size()<15)p.push_back(0);p.push_back(ck);
+                const char*H="0123456789ABCDEF";
+                auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+                int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
+                return s;};
+              return pkt(cf)+"|"+pkt(ef);};
+            if(x=="on"||x=="off") id(tx).send_hex(build({0x09},8,15));
+            else if(x.find("on#")==0){
+              int s=std::stoi(x.substr(3));
+              std::vector<uint8_t> vm[]={},{0x19},{0x1A},{0x81},{0x88},{0x85},{0x86}};
+              int cm[]={0,10,0,13,8,10,5},em[]={0,7,5,5,12,12,1};
+              if(s>=1&&s<=6) id(tx).send_hex(build(vm[s],cm[s],em[s]));}
 
-            if (x == "on" || x == "off") id(tx).send_hex(build_cmd({0x09}, 8, 15)); // Toggle
-            else if (x.find("on#") == 0) {
-                int s = std::stoi(x.substr(3));
-                std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-                int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-                int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-                if (s >= 1 && s <= 6) id(tx).send_hex(build_cmd(v_map[s], c_map[s], e_map[s]));
-            }
-
-    # ==========================================================
-    #  次卧灯 (cwlight002) - 动态算法生成
-    # ==========================================================
+    # === 次卧灯 ===
     - topic: "cwlight002"
       then:
         - lambda: |-
             std::string mac = "F0CF2D700000";
-            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
-                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-                uint8_t table[16]; int l=0, r=1;
-                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-                
-                auto make_pkt = [&](int flag) {
-                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                    for(auto v:values) chk = (chk+v)&0xFF;
-                    std::vector<uint8_t> p = {ch, ver, cmd_type};
-                    for(auto v:values) p.push_back(v);
-                    while(p.size()<15) p.push_back(0x00);
-                    p.push_back(chk);
-                    const char* hex = "0123456789ABCDEF";
-                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                    int idx = flag & 0x0F;
-                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                    return res;
-                };
-                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
-            };
+            auto build = [&](std::vector<uint8_t> vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+              uint8_t tb[16]; int l=0,r=1;
+              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+              auto pkt=[&](int fl)->std::string{
+                uint8_t ch=1,ver=1,ct=(vals.size()>1)?1:0,ck=(ch+ver+ct);
+                for(auto v:vals)ck=(ck+v)&0xFF;
+                std::vector<uint8_t> p={ch,ver,ct};for(auto v:vals)p.push_back(v);
+                while(p.size()<15)p.push_back(0);p.push_back(ck);
+                const char*H="0123456789ABCDEF";
+                auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+                int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
+                return s;};
+              return pkt(cf)+"|"+pkt(ef);};
+            if(x=="on"||x=="off") id(tx).send_hex(build({0x06},2,4));
+            else if(x.find("on#")==0){
+              std::string rest=x.substr(3);int v=std::stoi(rest);
+              size_t p2=rest.find('#');int ck=4500;
+              if(p2!=std::string::npos){int k=std::stoi(rest.substr(p2+1));
+                if(k>10000)ck=4500;else if(k<=100)ck=2700+(6500-2700)*k/100;else ck=k;}
+              int bv=std::round(v*255.0/100.0);
+              int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
+              id(tx).send_hex(build({0x5B,(uint8_t)bv,(uint8_t)tv},2,4));}
 
-            if (x == "on") id(tx).send_hex(build_cmd({0x06}, 2, 4));
-            else if (x == "off") id(tx).send_hex(build_cmd({0x06}, 2, 4));
-            else if (x.find("on#") == 0) {
-                std::string rest = x.substr(3);
-                int v = std::stoi(rest);
-                size_t p2 = rest.find('#');
-                int ct_k = 4500;
-                if (p2 != std::string::npos) {
-                    int k = std::stoi(rest.substr(p2 + 1));
-                    if (k > 10000) ct_k = 4500;
-                    else if (k <= 100) ct_k = 2700 + (6500 - 2700) * k / 100;
-                    else ct_k = k;
-                }
-                int brt_val = std::round(v * 255.0 / 100.0);
-                int temp_val = std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0));
-                temp_val = std::max(0, std::min(255, temp_val));
-                id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
-            }
-
-    # ==========================================================
-    #  次卧风扇 (cwfan003) - 动态算法生成
-    # ==========================================================
+    # === 次卧风扇 ===
     - topic: "cwfan003"
       then:
         - lambda: |-
             std::string mac = "F0CF2D700000";
-            auto build_cmd = [&](const std::vector<uint8_t>& values, int ctrl_f, int end_f) -> std::string {
-                uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-                uint8_t table[16]; int l=0, r=1;
-                for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-                table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-                
-                auto make_pkt = [&](int flag) {
-                    uint8_t ch=0x01, ver=0x01, cmd_type = (values.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                    for(auto v:values) chk = (chk+v)&0xFF;
-                    std::vector<uint8_t> p = {ch, ver, cmd_type};
-                    for(auto v:values) p.push_back(v);
-                    while(p.size()<15) p.push_back(0x00);
-                    p.push_back(chk);
-                    const char* hex = "0123456789ABCDEF";
-                    auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                    std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                    int idx = flag & 0x0F;
-                    for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                    return res;
-                };
-                return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
-            };
+            auto build = [&](std::vector<uint8_t> vals, int cf, int ef) -> std::string {
+              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+              uint8_t tb[16]; int l=0,r=1;
+              for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+              tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+              auto pkt=[&](int fl)->std::string{
+                uint8_t ch=1,ver=1,ct=(vals.size()>1)?1:0,ck=(ch+ver+ct);
+                for(auto v:vals)ck=(ck+v)&0xFF;
+                std::vector<uint8_t> p={ch,ver,ct};for(auto v:vals)p.push_back(v);
+                while(p.size()<15)p.push_back(0);p.push_back(ck);
+                const char*H="0123456789ABCDEF";
+                auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+                std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+                int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}
+                return s;};
+              return pkt(cf)+"|"+pkt(ef);};
+            if(x=="on"||x=="off") id(tx).send_hex(build({0x09},8,15));
+            else if(x.find("on#")==0){
+              int s=std::stoi(x.substr(3));
+              std::vector<uint8_t> vm[]={},{0x19},{0x1A},{0x81},{0x88},{0x85},{0x86}};
+              int cm[]={0,10,0,13,8,10,5},em[]={0,7,5,5,12,12,1};
+              if(s>=1&&s<=6) id(tx).send_hex(build(vm[s],cm[s],em[s]));}
 
-            if (x == "on" || x == "off") id(tx).send_hex(build_cmd({0x09}, 8, 15)); // Toggle
-            else if (x.find("on#") == 0) {
-                int s = std::stoi(x.substr(3));
-                std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-                int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-                int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-                if (s >= 1 && s <= 6) id(tx).send_hex(build_cmd(v_map[s], c_map[s], e_map[s]));
-            }
-
-# ===================== BLE 扫描与状态上报 (智能节流 + 双向同步) =====================
+# ===================== BLE 扫描与状态上报 =====================
 esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
@@ -260,470 +201,471 @@ esp32_ble_tracker:
               auto &raw = data.data;
               if (raw.size() < 20) continue;
 
-              // ===== Dining 餐厅设备 =====
               uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                  bool light_on = (raw[i + 7] == 0x01);
-                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                  uint8_t fan_state = raw[i + 16];
-                  bool fan_run = (fan_state & 0x01) != 0; 
-                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
+                  bool light_on = (raw[i+7] == 0x01);
+                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
+                  uint8_t fs = raw[i+16];
+                  bool fan_run = (fs & 0x01) != 0;
+                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
 
-                  static bool last_light = false, last_fan_run = false;
-                  static int last_brt = -1, last_ct = -1, last_fan_spd = -1;
-                  static uint32_t last_report = 0, last_change = 0;
-                  static uint8_t retry_count = 0;
-
-                  bool changed = (light_on != last_light) || (brt != last_brt) || (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
-                  if (changed) { last_change = millis(); retry_count = 0; last_light = light_on; last_brt = brt; last_ct = ct_k; last_fan_run = fan_run; last_fan_spd = fan_spd; }
-                  bool heartbeat = (millis() - last_report > 60000);
-                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
-
-                  if (changed || heartbeat || retry) {
-                    if (retry) retry_count++; else retry_count = 0;
-                    last_report = millis();
-                    
-                    // 1. 上报给巴法云
-                    if (light_on) id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
-                    else id(bemfa).publish("ctlight002/up", "off");
-                    if (fan_run) id(bemfa).publish("ctfan003/up", "on#" + std::to_string(fan_spd));
-                    else id(bemfa).publish("ctfan003/up", "off");
-
-                    // 2. 反向同步给 HA 原生 Light 组件
-                    auto light_call = id(ct_light).make_call();
-                    light_call.set_state(light_on);
-                    if (light_on) { light_call.set_brightness(brt / 100.0f); light_call.set_color_temperature(1000000.0f / ct_k); }
-                    light_call.perform();
-
-                    // 3. 反向同步给 HA 原生 Fan 组件
-                    auto fan_call = id(ct_fan).make_call();
-                    fan_call.set_state(fan_run);
-                    if (fan_run) fan_call.set_speed(fan_spd);
-                    fan_call.perform();
+                  static bool ll=false,lfr=false; static int lb=-1,lc=-1,lfs=-1;
+                  static uint32_t lr=0,lch=0; static uint8_t rc=0;
+                  bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
+                  if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
+                  bool hb=(millis()-lr>60000);
+                  bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
+                  if(ch||hb||rt){
+                    if(rt)rc++;else rc=0; lr=millis();
+                    if(light_on) id(bemfa).publish("ctlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
+                    else id(bemfa).publish("ctlight002/up","off");
+                    if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
+                    else id(bemfa).publish("ctfan003/up","off");
+                    id(ct_light_st).publish_state(light_on);
+                    id(ct_brt_s).publish_state(brt);
+                    id(ct_ct_s).publish_state(ct_k);
+                    id(ct_fan_st).publish_state(fan_run);
+                    id(ct_spd_s).publish_state(fan_spd);
+                    id(ct_light_sw).publish_state(light_on);
+                    id(ct_fan_sw).publish_state(fan_run);
                   }
                   break;
                 }
               }
 
-              // ===== Bedroom 次卧设备 =====
               uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], cw_mac, 6) == 0) {
-                  bool light_on = (raw[i + 7] == 0x01);
-                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                  uint8_t fan_state = raw[i + 16];
-                  bool fan_run = (fan_state & 0x01) != 0;
-                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
+                  bool light_on = (raw[i+7] == 0x01);
+                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
+                  uint8_t fs = raw[i+16];
+                  bool fan_run = (fs & 0x01) != 0;
+                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
 
-                  static bool last_light = false, last_fan_run = false;
-                  static int last_brt = -1, last_ct = -1, last_fan_spd = -1;
-                  static uint32_t last_report = 0, last_change = 0;
-                  static uint8_t retry_count = 0;
-
-                  bool changed = (light_on != last_light) || (brt != last_brt) || (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
-                  if (changed) { last_change = millis(); retry_count = 0; last_light = light_on; last_brt = brt; last_ct = ct_k; last_fan_run = fan_run; last_fan_spd = fan_spd; }
-                  bool heartbeat = (millis() - last_report > 60000);
-                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
-
-                  if (changed || heartbeat || retry) {
-                    if (retry) retry_count++; else retry_count = 0;
-                    last_report = millis();
-                    
-                    // 1. 上报给巴法云
-                    if (light_on) id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
-                    else id(bemfa).publish("cwlight002/up", "off");
-                    if (fan_run) id(bemfa).publish("cwfan003/up", "on#" + std::to_string(fan_spd));
-                    else id(bemfa).publish("cwfan003/up", "off");
-
-                    // 2. 反向同步给 HA 原生 Light 组件
-                    auto light_call = id(cw_light).make_call();
-                    light_call.set_state(light_on);
-                    if (light_on) { light_call.set_brightness(brt / 100.0f); light_call.set_color_temperature(1000000.0f / ct_k); }
-                    light_call.perform();
-
-                    // 3. 反向同步给 HA 原生 Fan 组件
-                    auto fan_call = id(cw_fan).make_call();
-                    fan_call.set_state(fan_run);
-                    if (fan_run) fan_call.set_speed(fan_spd);
-                    fan_call.perform();
+                  static bool ll=false,lfr=false; static int lb=-1,lc=-1,lfs=-1;
+                  static uint32_t lr=0,lch=0; static uint8_t rc=0;
+                  bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
+                  if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
+                  bool hb=(millis()-lr>60000);
+                  bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
+                  if(ch||hb||rt){
+                    if(rt)rc++;else rc=0; lr=millis();
+                    if(light_on) id(bemfa).publish("cwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
+                    else id(bemfa).publish("cwlight002/up","off");
+                    if(fan_run) id(bemfa).publish("cwfan003/up","on#"+std::to_string(fan_spd));
+                    else id(bemfa).publish("cwfan003/up","off");
+                    id(cw_light_st).publish_state(light_on);
+                    id(cw_brt_s).publish_state(brt);
+                    id(cw_ct_s).publish_state(ct_k);
+                    id(cw_fan_st).publish_state(fan_run);
+                    id(cw_spd_s).publish_state(fan_spd);
+                    id(cw_light_sw).publish_state(light_on);
+                    id(cw_fan_sw).publish_state(fan_run);
                   }
                   break;
                 }
               }
             }
 
-# ===================== 原生灯光组件 (HA 完美支持亮度/色温) =====================
-light:
+# ===================== 开关 (动态算法) =====================
+switch:
   - platform: template
-    name: "Dining Light 餐厅灯"
-    id: ct_light
-    color_temperature: true
-    brightness: true
-    cold_white_color_temperature: 6500 K
-    warm_white_color_temperature: 2700 K
+    name: "Dining Light SW"
+    id: ct_light_sw
+    icon: mdi:ceiling-light
+    optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: |-
-          auto values = id(ct_light).remote_values;
-          int brt = std::round(values.get_brightness() * 100.0f);
-          int ct_k = std::round(1000000.0f / values.get_color_temperature());
-          int brt_val = std::round(brt * 255.0 / 100.0);
-          int temp_val = std::max(0, std::min(255, std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0))));
-          
-          std::string mac = "488027700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
-          id(bemfa).publish("ctlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x06},2,4));
     turn_off_action:
       - lambda: |-
-          std::string mac = "488027700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x06}, 2, 4));
-          id(bemfa).publish("ctlight002/up", "off");
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x06},2,4));
+    lambda: 'return id(ct_light_st).state;'
 
   - platform: template
-    name: "Bedroom Light 次卧灯"
-    id: cw_light
-    color_temperature: true
-    brightness: true
-    cold_white_color_temperature: 6500 K
-    warm_white_color_temperature: 2700 K
+    name: "Dining Fan SW"
+    id: ct_fan_sw
+    icon: mdi:fan
+    optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: |-
-          auto values = id(cw_light).remote_values;
-          int brt = std::round(values.get_brightness() * 100.0f);
-          int ct_k = std::round(1000000.0f / values.get_color_temperature());
-          int brt_val = std::round(brt * 255.0 / 100.0);
-          int temp_val = std::max(0, std::min(255, std::round((ct_k - 2700.0) * 255.0 / (6500.0 - 2700.0))));
-          
-          std::string mac = "F0CF2D700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x5B, (uint8_t)brt_val, (uint8_t)temp_val}, 2, 4));
-          id(bemfa).publish("cwlight002/up", "on#" + std::to_string(brt) + "#" + std::to_string(ct_k));
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x09},8,15));
     turn_off_action:
       - lambda: |-
-          std::string mac = "F0CF2D700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x06}, 2, 4));
-          id(bemfa).publish("cwlight002/up", "off");
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x09},8,15));
+    lambda: 'return id(ct_fan_st).state;'
 
-# ===================== 原生风扇组件 (HA 完美支持 1-6 档) =====================
-fan:
   - platform: template
-    name: "Dining Fan 餐厅风扇"
-    id: ct_fan
-    speed_count: 6
+    name: "Bedroom Light SW"
+    id: cw_light_sw
+    icon: mdi:ceiling-light
+    optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: |-
-          int spd = id(ct_fan).speed; if (spd == 0) spd = 1;
-          std::string mac = "488027700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
-          id(bemfa).publish("ctfan003/up", "on#" + std::to_string(spd));
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x06},2,4));
     turn_off_action:
       - lambda: |-
-          std::string mac = "488027700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x09}, 8, 15));
-          id(bemfa).publish("ctfan003/up", "off");
-    on_speed_set:
-      - lambda: |-
-          int spd = id(ct_fan).speed;
-          std::string mac = "488027700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
-          id(bemfa).publish("ctfan003/up", "on#" + std::to_string(spd));
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x06},2,4));
+    lambda: 'return id(cw_light_st).state;'
 
   - platform: template
-    name: "Bedroom Fan 次卧风扇"
-    id: cw_fan
-    speed_count: 6
+    name: "Bedroom Fan SW"
+    id: cw_fan_sw
+    icon: mdi:fan
+    optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: |-
-          int spd = id(cw_fan).speed; if (spd == 0) spd = 1;
-          std::string mac = "F0CF2D700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
-          id(bemfa).publish("cwfan003/up", "on#" + std::to_string(spd));
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x09},8,15));
     turn_off_action:
       - lambda: |-
-          std::string mac = "F0CF2D700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          id(tx).send_hex(build_cmd({0x09}, 8, 15));
-          id(bemfa).publish("cwfan003/up", "off");
-    on_speed_set:
-      - lambda: |-
-          int spd = id(cw_fan).speed;
-          std::string mac = "F0CF2D700000";
-          auto build_cmd = [&](const std::vector<uint8_t>& vals, int cf, int ef) -> std::string {
-              uint8_t hx[6]; for(int i=0;i<6;i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-              uint8_t table[16]; int l=0, r=1;
-              for(int i=0; i<15; i++) { table[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){l++; r=l+1;} }
-              table[15] = 0; for(int i=0;i<6;i++) table[15] = (table[15] + hx[i]) & 0xFF;
-              auto make_pkt = [&](int flag) {
-                  uint8_t ch=0x01, ver=0x01, cmd_type = (vals.size()>1)?0x01:0x00, chk = (ch+ver+cmd_type);
-                  for(auto v:vals) chk = (chk+v)&0xFF;
-                  std::vector<uint8_t> p = {ch, ver, cmd_type};
-                  for(auto v:vals) p.push_back(v);
-                  while(p.size()<15) p.push_back(0x00);
-                  p.push_back(chk);
-                  const char* hex = "0123456789ABCDEF";
-                  auto to_h = [&](uint8_t b){ return std::string(1, hex[b>>4]) + hex[b&0x0F]; };
-                  std::string res = "0201021BFF114D19" + to_h(0x10 | (flag&0x0F)) + mac + "01";
-                  int idx = flag & 0x0F;
-                  for(int i=1; i<16; i++) { res += to_h(p[i] ^ table[idx%16]); idx++; }
-                  return res;
-              };
-              return make_pkt(cf) + "|" + make_pkt(ef);
-          };
-          std::vector<uint8_t> v_map[] = {{}, {0x19}, {0x1A}, {0x81}, {0x88}, {0x85}, {0x86}};
-          int c_map[] = {0, 10, 0, 13, 8, 10, 5};
-          int e_map[] = {0, 7, 5, 5, 12, 12, 1};
-          id(tx).send_hex(build_cmd(v_map[spd], c_map[spd], e_map[spd]));
-          id(bemfa).publish("cwfan003/up", "on#" + std::to_string(spd));
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x09},8,15));
+    lambda: 'return id(cw_fan_st).state;'
 
-# ===================== 系统状态传感器 =====================
+# ===================== 数值滑块 (亮度/色温/档位) =====================
+number:
+  - platform: template
+    name: "Dining Brightness"
+    id: ct_brt_n
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    set_action:
+      - lambda: |-
+          int brt=(int)x; int bv=std::round(brt*255.0/100.0);
+          int tv=std::round((4500.0-2700.0)*255.0/3800.0);
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x51,(uint8_t)bv},2,4));
+
+  - platform: template
+    name: "Dining ColorTemp"
+    id: ct_ct_n
+    min_value: 2700
+    max_value: 6500
+    step: 100
+    unit_of_measurement: "K"
+    icon: mdi:thermometer
+    set_action:
+      - lambda: |-
+          int ck=(int)x;
+          int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x55,(uint8_t)tv},2,4));
+
+  - platform: template
+    name: "Dining Fan Speed"
+    id: ct_spd_n
+    min_value: 1
+    max_value: 6
+    step: 1
+    icon: mdi:fan-speed-1
+    set_action:
+      - lambda: |-
+          int s=(int)x;
+          std::vector<uint8_t> vm[]={},{0x19},{0x1A},{0x81},{0x88},{0x85},{0x86}};
+          int cm[]={0,10,0,13,8,10,5},em[]={0,7,5,5,12,12,1};
+          std::string mac="488027700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          if(s>=1&&s<=6) id(tx).send_hex(build(vm[s],cm[s],em[s]));
+
+  - platform: template
+    name: "Bedroom Brightness"
+    id: cw_brt_n
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    set_action:
+      - lambda: |-
+          int brt=(int)x; int bv=std::round(brt*255.0/100.0);
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x51,(uint8_t)bv},2,4));
+
+  - platform: template
+    name: "Bedroom ColorTemp"
+    id: cw_ct_n
+    min_value: 2700
+    max_value: 6500
+    step: 100
+    unit_of_measurement: "K"
+    icon: mdi:thermometer
+    set_action:
+      - lambda: |-
+          int ck=(int)x;
+          int tv=std::max(0,std::min(255,(int)std::round((ck-2700.0)*255.0/3800.0)));
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          id(tx).send_hex(build({0x55,(uint8_t)tv},2,4));
+
+  - platform: template
+    name: "Bedroom Fan Speed"
+    id: cw_spd_n
+    min_value: 1
+    max_value: 6
+    step: 1
+    icon: mdi:fan-speed-1
+    set_action:
+      - lambda: |-
+          int s=(int)x;
+          std::vector<uint8_t> vm[]={},{0x19},{0x1A},{0x81},{0x88},{0x85},{0x86}};
+          int cm[]={0,10,0,13,8,10,5},em[]={0,7,5,5,12,12,1};
+          std::string mac="F0CF2D700000";
+          auto build=[&](std::vector<uint8_t> v,int cf,int ef)->std::string{
+            uint8_t hx[6];for(int i=0;i<6;i++)hx[i]=std::stoi(mac.substr(i*2,2),nullptr,16);
+            uint8_t tb[16];int l=0,r=1;for(int i=0;i<15;i++){tb[i]=(hx[l]+hx[r])&0xFF;r++;if(r==6){l++;r=l+1;}}
+            tb[15]=0;for(int i=0;i<6;i++)tb[15]=(tb[15]+hx[i])&0xFF;
+            auto pkt=[&](int fl)->std::string{uint8_t ch=1,ver=1,ct=(v.size()>1)?1:0,ck=(ch+ver+ct);
+              for(auto x:v)ck=(ck+x)&0xFF;std::vector<uint8_t> p={ch,ver,ct};for(auto x:v)p.push_back(x);
+              while(p.size()<15)p.push_back(0);p.push_back(ck);const char*H="0123456789ABCDEF";
+              auto th=[&](uint8_t b){return std::string(1,H[b>>4])+H[b&0xF];};
+              std::string s="0201021BFF114D19"+th(0x10|(fl&0xF))+mac+"01";
+              int idx=fl&0xF;for(int i=1;i<16;i++){s+=th(p[i]^tb[idx%16]);idx++;}return s;};
+            return pkt(cf)+"|"+pkt(ef);};
+          if(s>=1&&s<=6) id(tx).send_hex(build(vm[s],cm[s],em[s]));
+
+# ===================== 传感器 =====================
 sensor:
+  - platform: template
+    name: "Dining Brt Sensor"
+    id: ct_brt_s
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "Dining CT Sensor"
+    id: ct_ct_s
+    unit_of_measurement: "K"
+  - platform: template
+    name: "Dining Spd Sensor"
+    id: ct_spd_s
+  - platform: template
+    name: "Bedroom Brt Sensor"
+    id: cw_brt_s
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "Bedroom CT Sensor"
+    id: cw_ct_s
+    unit_of_measurement: "K"
+  - platform: template
+    name: "Bedroom Spd Sensor"
+    id: cw_spd_s
   - platform: uptime
-    name: "Gateway Uptime 运行时间"
-    id: gateway_uptime
+    name: "Uptime"
     update_interval: 60s
-    icon: mdi:timer-outline
   - platform: internal_temperature
-    name: "ESP32 Temp 芯片温度"
+    name: "ESP32 Temp"
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     update_interval: 60s
-    icon: mdi:thermometer
   - platform: wifi_signal
-    name: "WiFi dBm 信号强度"
+    name: "WiFi dBm"
     id: wifi_signal_db
     update_interval: 60s
-    icon: mdi:wifi
   - platform: copy
     source_id: wifi_signal_db
-    name: "WiFi Pct 信号百分比"
+    name: "WiFi Pct"
     filters:
-      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+      - lambda: return min(max(2*(x+100.0),0.0),100.0);
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    icon: mdi:wifi-strength-4
 
 binary_sensor:
   - platform: status
-    name: "Gateway Status 网关状态"
+    name: "Gateway Online"
     device_class: connectivity
+  - platform: template
+    name: "Dining Light State"
+    id: ct_light_st
+    device_class: light
+  - platform: template
+    name: "Bedroom Light State"
+    id: cw_light_st
+    device_class: light
+  - platform: template
+    name: "Dining Fan State"
+    id: ct_fan_st
+    device_class: running
+  - platform: template
+    name: "Bedroom Fan State"
+    id: cw_fan_st
+    device_class: running
 
 text_sensor:
   - platform: template
-    name: "Build Time 编译时间"
+    name: "Build Time"
     lambda: 'return {"${build_time}"};'
-    icon: mdi:calendar-clock
     update_interval: 3600s
   - platform: version
-    name: "ESPHome Ver 版本"
+    name: "ESPHome Ver"
     hide_timestamp: true
   - platform: wifi_info
     ip_address:
-      name: "ESP IP 地址"
-      icon: mdi:ip
+      name: "ESP IP"
     ssid:
-      name: "ESP SSID WiFi名"
-      icon: mdi:wifi
+      name: "ESP SSID"
     mac_address:
-      name: "ESP MAC 物理地址"
+      name: "ESP MAC"
+
+button:
+  - platform: restart
+    name: "Restart GW"
+    icon: mdi:restart
+    entity_category: diagnostic
