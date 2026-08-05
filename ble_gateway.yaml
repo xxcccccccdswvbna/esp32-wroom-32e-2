@@ -11,7 +11,6 @@ esphome:
 esp32:
   board: esp32dev
   flash_size: 4MB
-  sram1_as_iram: false
   framework:
     type: esp-idf
     version: 4.4.8
@@ -62,6 +61,7 @@ esp32_ble:
 bluetooth_proxy:
   active: true
   cache_services: true
+
 
 
 
