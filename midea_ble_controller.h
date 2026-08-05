@@ -49,39 +49,39 @@ inline std::string midea_build_cmd(const std::string &mac,
     return make_pkt(ctrl_f) + "|" + make_pkt(end_f);
 }
 
-// ========== 灯光命令（使用正确的结束包配对） ==========
+// ========== 灯光命令 ==========
+// LED 开关：控制 flag=8, 结束 flag=8
 inline std::string midea_light_toggle(const std::string &mac) {
-    // 🔥 LED开关：控制 flag=8, 结束 flag=8
     return midea_build_cmd(mac, {0x06}, 8, 8);
 }
 
+// 亮度：控制 flag=2, 结束 flag=4
 inline std::string midea_light_brightness(const std::string &mac, int pct) {
-    // 🔥 亮度：控制 flag=2, 结束 flag=4
     uint8_t bv = std::round(pct * 255.0 / 100.0);
     return midea_build_cmd(mac, {0x51, bv}, 2, 4);
 }
 
+// 色温：控制 flag=7, 结束 flag=12
 inline std::string midea_light_color_temp(const std::string &mac, int kelvin) {
-    // 🔥 色温：控制 flag=7, 结束 flag=12
     uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
     return midea_build_cmd(mac, {0x55, tv}, 7, 12);
 }
 
+// 亮度+色温组合：控制 flag=2, 结束 flag=4
 inline std::string midea_light_brightness_color(const std::string &mac, int pct, int kelvin) {
-    // 🔥 亮度+色温组合：控制 flag=2, 结束 flag=4
     uint8_t bv = std::round(pct * 255.0 / 100.0);
     uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
     return midea_build_cmd(mac, {0x5B, bv, tv}, 2, 4);
 }
 
-// ========== 风扇命令（使用正确的结束包配对） ==========
+// ========== 风扇命令 ==========
+// 风扇开关：控制 flag=8, 结束 flag=15
 inline std::string midea_fan_toggle(const std::string &mac) {
-    // 🔥 风扇开关：控制 flag=8, 结束 flag=15
     return midea_build_cmd(mac, {0x09}, 8, 15);
 }
 
+// 风扇档位
 inline std::string midea_fan_speed(const std::string &mac, int speed) {
-    // 🔥 风扇档位：各自独立配对
     uint8_t cmd; int cf, ef;
     switch(speed) {
         case 1: cmd=0x19; cf=10; ef=7;  break;
@@ -93,4 +93,13 @@ inline std::string midea_fan_speed(const std::string &mac, int speed) {
         default: return "";
     }
     return midea_build_cmd(mac, {cmd}, cf, ef);
+}
+
+// ========== 辅助函数 ==========
+inline uint8_t midea_kelvin_to_val(int kelvin) {
+    return std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
+}
+
+inline uint8_t midea_pct_to_val(int pct) {
+    return std::round(pct * 255.0 / 100.0);
 }
