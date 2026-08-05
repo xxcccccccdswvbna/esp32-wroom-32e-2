@@ -20,7 +20,6 @@ esp32:
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 
-# ===================== 系统基础 =====================
 logger:
   baud_rate: 0
   level: INFO
@@ -59,7 +58,7 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== MQTT (巴法云) 保留，用于小爱等 =====================
+# ===================== 巴法云 MQTT =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
@@ -72,75 +71,60 @@ mqtt:
   birth_message:
   will_message:
   on_message:
-    # ==========================================================
-    #  餐厅灯 (MQTT 通道，供小爱调用)
-    # ==========================================================
     - topic: "ctlight002"
       then:
         - lambda: |-
             MideaController ctrl("488027700000");
             if (x == "on") {
-              ctrl.send_light_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
             } else if (x == "off") {
-              ctrl.send_light_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
             } else if (x.find("on#") == 0) {
               std::string rest = x.substr(3);
               int brt = atoi(rest.substr(0, rest.find('#')).c_str());
               int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              ctrl.send_light_brightness_color(id(tx), brt, ct);
+              id(tx).send_hex(ctrl.make_command({0x5B, (uint8_t)round(brt * 255.0 / 100.0), (uint8_t)round((ct - 2700.0) * 255.0 / 3800.0)}, 2, 4));
             }
-
-    # ==========================================================
-    #  餐厅风扇 (MQTT)
-    # ==========================================================
     - topic: "ctfan003"
       then:
         - lambda: |-
             MideaController ctrl("488027700000");
             if (x == "on") {
-              ctrl.send_fan_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
             } else if (x == "off") {
-              ctrl.send_fan_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
             } else if (x.find("on#") == 0) {
-              int speed = atoi(x.substr(3).c_str());
-              ctrl.send_fan_speed(id(tx), speed);
+              int s = atoi(x.substr(3).c_str());
+              id(tx).send_hex(ctrl.make_fan_speed_command(s));
             }
-
-    # ==========================================================
-    #  次卧灯 (MQTT)
-    # ==========================================================
     - topic: "cwlight002"
       then:
         - lambda: |-
             MideaController ctrl("F0CF2D700000");
             if (x == "on") {
-              ctrl.send_light_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
             } else if (x == "off") {
-              ctrl.send_light_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
             } else if (x.find("on#") == 0) {
               std::string rest = x.substr(3);
               int brt = atoi(rest.substr(0, rest.find('#')).c_str());
               int ct = atoi(rest.substr(rest.find('#') + 1).c_str());
-              ctrl.send_light_brightness_color(id(tx), brt, ct);
+              id(tx).send_hex(ctrl.make_command({0x5B, (uint8_t)round(brt * 255.0 / 100.0), (uint8_t)round((ct - 2700.0) * 255.0 / 3800.0)}, 2, 4));
             }
-
-    # ==========================================================
-    #  次卧风扇 (MQTT)
-    # ==========================================================
     - topic: "cwfan003"
       then:
         - lambda: |-
             MideaController ctrl("F0CF2D700000");
             if (x == "on") {
-              ctrl.send_fan_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
             } else if (x == "off") {
-              ctrl.send_fan_toggle(id(tx));
+              id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
             } else if (x.find("on#") == 0) {
-              int speed = atoi(x.substr(3).c_str());
-              ctrl.send_fan_speed(id(tx), speed);
+              int s = atoi(x.substr(3).c_str());
+              id(tx).send_hex(ctrl.make_fan_speed_command(s));
             }
 
-# ===================== 状态扫描（通用 8153 解析） =====================
+# ===================== BLE 状态扫描 =====================
 esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
@@ -150,88 +134,68 @@ esp32_ble_tracker:
     - then:
         - lambda: |-
             for (auto &data : x.get_manufacturer_datas()) {
-                auto &raw = data.data;
-                if (raw.size() < 19) continue;
-
-                if (raw[0] == 0x81 && raw[1] == 0x53 && raw[2] == 0x01) {
-                    char mac_str[13];
-                    sprintf(mac_str, "%02X%02X%02X%02X%02X%02X",
-                            raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]);
-                    std::string mac = mac_str;
-
-                    uint8_t mode     = raw[11];
-                    uint8_t bri      = raw[14];
-                    uint8_t ct       = raw[15];
-                    uint8_t fan_gear = raw[18];
-
-                    bool light_on = (mode & 0x01);
-                    bool fan_on   = !(mode == 0x10 || mode == 0x11);
-                    int fan_speed = fan_on ? (fan_gear + 1) : 0;
-                    int brt_pct   = (int)round(bri * 100.0 / 255.0);
-                    int ct_kelvin = 2700 + (int)round(ct * (6500.0 - 2700.0) / 255.0);
-
-                    // 餐厅
-                    if (mac == "488027700000") {
-                        id(ct_light).publish_state(light_on);
-                        id(ct_light).publish_brightness(brt_pct);
-                        id(ct_light).publish_color_temperature(ct_kelvin);
-                        id(ct_fan).publish_state(fan_on);
-                        id(ct_fan).publish_speed(fan_speed);
-                        // 同步 MQTT 上报（可选）
-                        if (light_on)
-                            id(bemfa).publish("ctlight002/up", ("on#" + to_string(brt_pct) + "#" + to_string(ct_kelvin)).c_str());
-                        else
-                            id(bemfa).publish("ctlight002/up", "off");
-                        if (fan_on)
-                            id(bemfa).publish("ctfan003/up", ("on#" + to_string(fan_speed)).c_str());
-                        else
-                            id(bemfa).publish("ctfan003/up", "off");
-                    }
-                    // 次卧
-                    else if (mac == "F0CF2D700000") {
-                        id(cw_light).publish_state(light_on);
-                        id(cw_light).publish_brightness(brt_pct);
-                        id(cw_light).publish_color_temperature(ct_kelvin);
-                        id(cw_fan).publish_state(fan_on);
-                        id(cw_fan).publish_speed(fan_speed);
-                        if (light_on)
-                            id(bemfa).publish("cwlight002/up", ("on#" + to_string(brt_pct) + "#" + to_string(ct_kelvin)).c_str());
-                        else
-                            id(bemfa).publish("cwlight002/up", "off");
-                        if (fan_on)
-                            id(bemfa).publish("cwfan003/up", ("on#" + to_string(fan_speed)).c_str());
-                        else
-                            id(bemfa).publish("cwfan003/up", "off");
-                    }
+              auto &raw = data.data;
+              if (raw.size() < 19) continue;
+              if (raw[0] == 0x81 && raw[1] == 0x53 && raw[2] == 0x01) {
+                char mac_str[13];
+                sprintf(mac_str, "%02X%02X%02X%02X%02X%02X",
+                        raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]);
+                std::string mac = mac_str;
+                uint8_t mode     = raw[11];
+                uint8_t bri      = raw[14];
+                uint8_t ct       = raw[15];
+                uint8_t fan_gear = raw[18];
+                bool light_on = (mode & 0x01);
+                bool fan_on   = !(mode == 0x10 || mode == 0x11);
+                int fan_speed = fan_on ? (fan_gear + 1) : 0;
+                int brt_pct   = (int)round(bri * 100.0 / 255.0);
+                int ct_kelvin = 2700 + (int)round(ct * 3800.0 / 255.0);
+                if (mac == "488027700000") {
+                  id(ct_light).publish_state(light_on);
+                  id(ct_light).publish_brightness(brt_pct);
+                  id(ct_light).publish_color_temperature(ct_kelvin);
+                  id(ct_fan).publish_state(fan_on);
+                  id(ct_fan).publish_speed(fan_speed);
+                } else if (mac == "F0CF2D700000") {
+                  id(cw_light).publish_state(light_on);
+                  id(cw_light).publish_brightness(brt_pct);
+                  id(cw_light).publish_color_temperature(ct_kelvin);
+                  id(cw_fan).publish_state(fan_on);
+                  id(cw_fan).publish_speed(fan_speed);
                 }
+              }
             }
 
 # ===================== 原生 Light 组件 =====================
 light:
-  # 餐厅灯
   - platform: template
     name: "Dining Light"
     id: ct_light
     icon: mdi:ceiling-light
     supports_brightness: true
     supports_color_temperature: true
-    min_mireds: 153   # 6500K -> 153 mireds
-    max_mireds: 370   # 2700K -> 370 mireds
+    min_mireds: 153
+    max_mireds: 370
     turn_on_action:
       - lambda: |-
-          MideaController("488027700000").send_light_toggle(id(tx));
+          MideaController ctrl("488027700000");
+          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
     turn_off_action:
       - lambda: |-
-          MideaController("488027700000").send_light_toggle(id(tx));
+          MideaController ctrl("488027700000");
+          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
     brightness_action:
       - lambda: |-
-          MideaController("488027700000").send_light_brightness(id(tx), static_cast<int>(brightness * 100.0));
+          MideaController ctrl("488027700000");
+          uint8_t brt = round(brightness * 255.0);
+          id(tx).send_hex(ctrl.make_command({0x51, brt}, 2, 4));
     color_temperature_action:
       - lambda: |-
-          int kelvin = static_cast<int>(1000000.0 / color_temperature);
-          MideaController("488027700000").send_light_color_temp(id(tx), kelvin);
+          MideaController ctrl("488027700000");
+          int kelvin = (int)(1000000.0 / color_temperature);
+          uint8_t ct_val = round((kelvin - 2700.0) * 255.0 / 3800.0);
+          id(tx).send_hex(ctrl.make_command({0x55, ct_val}, 2, 4));
 
-  # 次卧灯
   - platform: template
     name: "Bedroom Light"
     id: cw_light
@@ -242,576 +206,58 @@ light:
     max_mireds: 370
     turn_on_action:
       - lambda: |-
-          MideaController("F0CF2D700000").send_light_toggle(id(tx));
+          MideaController ctrl("F0CF2D700000");
+          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
     turn_off_action:
       - lambda: |-
-          MideaController("F0CF2D700000").send_light_toggle(id(tx));
+          MideaController ctrl("F0CF2D700000");
+          id(tx).send_hex(ctrl.make_command({0x06}, 2, 4));
     brightness_action:
       - lambda: |-
-          MideaController("F0CF2D700000").send_light_brightness(id(tx), static_cast<int>(brightness * 100.0));
+          MideaController ctrl("F0CF2D700000");
+          uint8_t brt = round(brightness * 255.0);
+          id(tx).send_hex(ctrl.make_command({0x51, brt}, 2, 4));
     color_temperature_action:
       - lambda: |-
-          int kelvin = static_cast<int>(1000000.0 / color_temperature);
-          MideaController("F0CF2D700000").send_light_color_temp(id(tx), kelvin);
+          MideaController ctrl("F0CF2D700000");
+          int kelvin = (int)(1000000.0 / color_temperature);
+          uint8_t ct_val = round((kelvin - 2700.0) * 255.0 / 3800.0);
+          id(tx).send_hex(ctrl.make_command({0x55, ct_val}, 2, 4));
 
 # ===================== 原生 Fan 组件 =====================
 fan:
-  # 餐厅风扇
   - platform: template
     name: "Dining Fan"
     id: ct_fan
     icon: mdi:fan
     speed_count: 6
-    on_speed_set:
-      - lambda: |-
-          MideaController("488027700000").send_fan_speed(id(tx), static_cast<int>(speed));
     turn_on_action:
       - lambda: |-
-          MideaController("488027700000").send_fan_toggle(id(tx));
+          MideaController ctrl("488027700000");
+          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
     turn_off_action:
       - lambda: |-
-          MideaController("488027700000").send_fan_toggle(id(tx));
+          MideaController ctrl("488027700000");
+          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+    on_speed_set:
+      - lambda: |-
+          MideaController ctrl("488027700000");
+          id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(speed)));
 
-  # 次卧风扇
   - platform: template
     name: "Bedroom Fan"
     id: cw_fan
     icon: mdi:fan
     speed_count: 6
+    turn_on_action:
+      - lambda: |-
+          MideaController ctrl("F0CF2D700000");
+          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
+    turn_off_action:
+      - lambda: |-
+          MideaController ctrl("F0CF2D700000");
+          id(tx).send_hex(ctrl.make_command({0x09}, 8, 15));
     on_speed_set:
       - lambda: |-
-          MideaController("F0CF2D700000").send_fan_speed(id(tx), static_cast<int>(speed));
-    turn_on_action:
-      - lambda: |-
-          MideaController("F0CF2D700000").send_fan_toggle(id(tx));
-    turn_off_action:
-      - lambda: |-
-          MideaController("F0CF2D700000").send_fan_toggle(id(tx));              
-              if (v <= 10) {
-                id(tx).send_hex("0201021BFF114D191848802770000001819676257070005FC86FB84848A7A6|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
-              }
-              else if (v <= 30) {
-                id(tx).send_hex("0201021BFF114D19144880277000000149A6A1B3809727277070005FC86F3F|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
-              }
-              else if (v <= 45) {
-                id(tx).send_hex("0201021BFF114D191B48802770000001267121665FC86FB84848A7F080802D|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
-              }
-              else if (v <= 55) {
-                id(tx).send_hex("0201021BFF114D191248802770000001B94919D8F080809727277070005F1B|0201021BFF114D19144880277000000149A7F080809727277070005FC86FBA");
-              }
-              else if (v <= 70) {
-                id(tx).send_hex("0201021BFF114D191948802770000001962676E970005FC86FB84848A7F06D|0201021BFF114D1913488027700000014948A7F080809727277070005FC86D");
-              }
-              else if (v <= 90) {
-                id(tx).send_hex("0201021BFF114D1913488027700000014949F63C80809727277070005FC84F|0201021BFF114D1911488027700000016EB84848A7F080809727277070005D");
-              }
-              else {
-                id(tx).send_hex("0201021BFF114D191B48802770000001267121FF5FC86FB84848A7F08080C4|0201021BFF114D191E48802770000001015FC86FB84848A7F0808097272772");
-              }
-            }
-
-    # ==========================================================
-    #  餐厅风扇 (ctfan003)
-    # ==========================================================
-    - topic: "ctfan003"
-      then:
-        - lambda: |-
-            if (x == "on") {
-              id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");
-            }
-            else if (x == "off") {
-              id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");
-            }
-            else if (x.find("on#") == 0) {
-              int s = atoi(x.substr(3).c_str());
-              ESP_LOGW("CMD", "ctfan speed=%d", s);
-              if (s == 1) {
-                id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");
-              }
-              else if (s == 2) {
-                id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
-              }
-              else if (s == 3) {
-                id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");
-              }
-              else if (s == 4) {
-                id(tx).send_hex("0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A|0201021BFF114D1911488027700000016EB8CE48A7F08080972727707000D7");
-              }
-            }
-
-    # ==========================================================
-    #  次卧灯 (cwlight002)
-    # ==========================================================
-    - topic: "cwlight002"
-      then:
-        - lambda: |-
-            if (x == "on") {
-              id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-            }
-            else if (x == "off") {
-              id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-            }
-            else if (x.find("on#") == 0) {
-              std::string rest = x.substr(3);
-              int v = atoi(rest.c_str());
-              size_t p2 = rest.find('#');
-              
-              if (p2 != std::string::npos) {
-                int k = atoi(rest.substr(p2 + 1).c_str());
-                if (k <= 3100) {
-                  id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2C2570005CBF1D60F0F0FC3FCF97|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
-                }
-                else if (k <= 5000) {
-                  id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5893FCFCF9D2D2D7070005C72|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
-                }
-                else {
-                  id(tx).send_hex("0201021BFF114D1912F0CF2D7000000161F1A5033FCFCF9D2D2D7070005CE8|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");
-                }
-              }
-              
-              if (v <= 10) {
-                id(tx).send_hex("0201021BFF114D191DF0CF2D7000000171010DBD1D60F0F0FC3FCFCF9D2D7B|0201021BFF114D191EF0CF2D70000001015CBF1D60F0F0FC3FCFCF9D2D2D72");
-              }
-              else if (v <= 30) {
-                id(tx).send_hex("0201021BFF114D191CF0CF2D7000000171715169BF1D60F0F0FC3FCFCF9DA4|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
-              }
-              else if (v <= 45) {
-                id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7121685CBF1D60F0F0FC3FCFCF21|0201021BFF114D191CF0CF2D700000017170005CBF1D60F0F0FC3FCFCF9D2F");
-              }
-              else if (v <= 55) {
-                id(tx).send_hex("0201021BFF114D1910F0CF2D70000001BE1C318FF0FC3FCFCF9D2D2D7070D3|0201021BFF114D1914F0CF2D70000001F1FC3FCFCF9D2D2D7070005CBF1D62");
-              }
-              else if (v <= 70) {
-                id(tx).send_hex("0201021BFF114D191EF0CF2D70000001015DEE8B60F0F0FC3FCFCF9D2D2D9A|0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002");
-              }
-              else if (v <= 90) {
-                id(tx).send_hex("0201021BFF114D1913F0CF2D70000001F1F1ADF6CFCF9D2D2D7070005CBF00|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
-              }
-              else {
-                id(tx).send_hex("0201021BFF114D191FF0CF2D700000015DBE4C9FF0F0FC3FCFCF9D2D2D7023|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
-              }
-            }
-
-    # ==========================================================
-    #  次卧风扇 (cwfan003)
-    # ==========================================================
-    - topic: "cwfan003"
-      then:
-        - lambda: |-
-            if (x == "on") {
-              id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");
-            }
-            else if (x == "off") {
-              id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");
-            }
-            else if (x.find("on#") == 0) {
-              int s = atoi(x.substr(3).c_str());
-              ESP_LOGW("CMD", "cwfan speed=%d", s);
-              if (s == 1) {
-                id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");
-              }
-              else if (s == 2) {
-                id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");
-              }
-              else if (s == 3) {
-                id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");
-              }
-              else if (s == 4) {
-                id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");
-              }
-            }
-
-# ===================== BLE 扫描与状态上报 =====================
-esp32_ble_tracker:
-  scan_parameters:
-    interval: 640ms
-    window: 30ms
-    active: false
-  on_ble_advertise:
-    - then:
-        - lambda: |-
-            auto datas = x.get_manufacturer_datas();
-            for (auto &data : datas) {
-              auto &raw = data.data;
-              if (raw.size() < 20) continue;
-
-              // ===== Dining 餐厅设备 (48:80:27:70:00:00) =====
-              uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
-              for (int i = 2; i <= (int)raw.size() - 6; i++) {
-                if (memcmp(&raw[i], ct_mac, 6) == 0) {
-                  bool light_on = (raw[i + 7] == 0x01);
-                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                  uint8_t fan_state = raw[i + 16];
-                  bool fan_run = (fan_state & 0x01) != 0; 
-                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
-
-                  static bool last_light = false;
-                  static int last_brt = -1;
-                  static int last_ct = -1;
-                  static bool last_fan_run = false;
-                  static int last_fan_spd = -1;
-                  static uint32_t last_report = 0;
-                  static uint32_t last_change = 0;
-                  static uint8_t retry_count = 0;
-
-                  bool changed = (light_on != last_light) || (brt != last_brt) || 
-                                 (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
-                  
-                  if (changed) {
-                    last_change = millis();
-                    retry_count = 0;
-                    last_light = light_on; last_brt = brt; last_ct = ct_k;
-                    last_fan_run = fan_run; last_fan_spd = fan_spd;
-                  }
-                  
-                  bool heartbeat = (millis() - last_report > 60000);
-                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
-
-                  if (changed || heartbeat || retry) {
-                    if (retry) retry_count++;
-                    else retry_count = 0;
-                    
-                    last_report = millis();
-
-                    const char* reason = changed ? "CHANGE" : (retry ? "RETRY" : "HEARTBEAT");
-                    ESP_LOGI("DINING", "[%s] Light:%d Brt:%d CT:%dK Fan:%d Spd:%d", 
-                             reason, light_on, brt, ct_k, fan_run, fan_spd);
-
-                    if (light_on) {
-                      id(bemfa).publish("ctlight002/up", "on#" + to_string(brt) + "#" + to_string(ct_k));
-                    } else {
-                      id(bemfa).publish("ctlight002/up", "off");
-                    }
-                    
-                    if (fan_run) {
-                      id(bemfa).publish("ctfan003/up", "on#" + to_string(fan_spd));
-                    } else {
-                      id(bemfa).publish("ctfan003/up", "off");
-                    }
-
-                    id(ct_light_state).publish_state(light_on);
-                    id(ct_light_brt).publish_state(brt);
-                    id(ct_light_ct).publish_state(ct_k);
-                    id(ct_fan_state).publish_state(fan_run);
-                    id(ct_fan_spd).publish_state(fan_spd);
-                    
-                    // 🔥 同步开关状态
-                    id(ct_light_sw).publish_state(light_on);
-                    id(ct_fan_sw).publish_state(fan_run);
-                  }
-                  break;
-                }
-              }
-
-              // ===== Bedroom 次卧设备 (F0:CF:2D:70:00:00) =====
-              uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
-              for (int i = 2; i <= (int)raw.size() - 6; i++) {
-                if (memcmp(&raw[i], cw_mac, 6) == 0) {
-                  bool light_on = (raw[i + 7] == 0x01);
-                  int brt = (int)(raw[i + 12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500 - 2700) * (int)(raw[i + 13] / 255.0f * 100.0f) / 100;
-                  uint8_t fan_state = raw[i + 16];
-                  bool fan_run = (fan_state & 0x01) != 0;
-                  int fan_spd = fan_run ? (raw[i + 17] + 1) : 0;
-
-                  static bool last_light = false;
-                  static int last_brt = -1;
-                  static int last_ct = -1;
-                  static bool last_fan_run = false;
-                  static int last_fan_spd = -1;
-                  static uint32_t last_report = 0;
-                  static uint32_t last_change = 0;
-                  static uint8_t retry_count = 0;
-
-                  bool changed = (light_on != last_light) || (brt != last_brt) || 
-                                 (ct_k != last_ct) || (fan_run != last_fan_run) || (fan_spd != last_fan_spd);
-                  
-                  if (changed) {
-                    last_change = millis();
-                    retry_count = 0;
-                    last_light = light_on; last_brt = brt; last_ct = ct_k;
-                    last_fan_run = fan_run; last_fan_spd = fan_spd;
-                  }
-                  
-                  bool heartbeat = (millis() - last_report > 60000);
-                  bool retry = (millis() - last_change < 10000) && (retry_count < 3) && (millis() - last_report > 3000);
-
-                  if (changed || heartbeat || retry) {
-                    if (retry) retry_count++;
-                    else retry_count = 0;
-                    
-                    last_report = millis();
-
-                    const char* reason = changed ? "CHANGE" : (retry ? "RETRY" : "HEARTBEAT");
-                    ESP_LOGI("BEDROOM", "[%s] Light:%d Brt:%d CT:%dK Fan:%d Spd:%d", 
-                             reason, light_on, brt, ct_k, fan_run, fan_spd);
-
-                    if (light_on) {
-                      id(bemfa).publish("cwlight002/up", "on#" + to_string(brt) + "#" + to_string(ct_k));
-                    } else {
-                      id(bemfa).publish("cwlight002/up", "off");
-                    }
-                    
-                    if (fan_run) {
-                      id(bemfa).publish("cwfan003/up", "on#" + to_string(fan_spd));
-                    } else {
-                      id(bemfa).publish("cwfan003/up", "off");
-                    }
-
-                    id(cw_light_state).publish_state(light_on);
-                    id(cw_light_brt).publish_state(brt);
-                    id(cw_light_ct).publish_state(ct_k);
-                    id(cw_fan_state).publish_state(fan_run);
-                    id(cw_fan_spd).publish_state(fan_spd);
-                    
-                    // 🔥 同步开关状态
-                    id(cw_light_sw).publish_state(light_on);
-                    id(cw_fan_sw).publish_state(fan_run);
-                  }
-                  break;
-                }
-              }
-            }
-
-# ===================== 开关（支持状态反馈） =====================
-switch:
-  # === 餐厅灯 ===
-  - platform: template
-    name: "Dining Light 餐厅灯"
-    id: ct_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191848802770000001819721277070005FC86FB84848A7F8|0201021BFF114D191848802770000001819727277070005FC86FB84848A7F2");'
-    turn_off_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191A4880277000000126277670005FC86FB84848A7F08088|0201021BFF114D19174880277000000181809727277070005FC86FB84848A5");'
-    lambda: |-
-      return id(ct_light_state).state;
-
-  # === 餐厅风扇 ===
-  - platform: template
-    name: "Dining Fan 餐厅风扇"
-    id: ct_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D19184880277000000181972E277070005FC86FB84848A7FB|0201021BFF114D191F488027700000015EC86FB84848A7F080809727277072");'
-    turn_off_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191648802770000001F180899727277070005FC86FB84843|0201021BFF114D1919488027700000019627277070005FC86FB84848A7F082");'
-    lambda: |-
-      return id(ct_fan_state).state;
-
-  # === 次卧灯 ===
-  - platform: template
-    name: "Bedroom Light 次卧灯"
-    id: cw_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");'
-    turn_off_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7|0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD");'
-    lambda: |-
-      return id(cw_light_state).state;
-
-  # === 次卧风扇 ===
-  - platform: template
-    name: "Bedroom Fan 次卧风扇"
-    id: cw_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057|0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F");'
-    turn_off_action:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96|0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D");'
-    lambda: |-
-      return id(cw_fan_state).state;
-
-# ===================== 按钮（风扇档位） =====================
-button:
-  - platform: restart
-    name: "Restart 重启网关"
-    icon: mdi:restart
-    entity_category: diagnostic
-
-  # === 餐厅风扇档位 ===
-  - platform: template
-    name: "Dining Fan 1 餐厅风扇1档"
-    icon: mdi:numeric-1-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191048802770000001C96FA24848A7F0808097272770701C|0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A");'
-      
-  - platform: template
-    name: "Dining Fan 2 餐厅风扇2档"
-    icon: mdi:numeric-2-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D1918488027700000018197AF277070005FC86FB84848A77A|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");'
-      
-  - platform: template
-    name: "Dining Fan 3 餐厅风扇3档"
-    icon: mdi:numeric-3-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191A488027700000012627F570005FC86FB84848A7F08007|0201021BFF114D191C488027700000017170005FC86FB84848A7F080809725");'
-      
-  - platform: template
-    name: "Dining Fan 4 餐厅风扇4档"
-    icon: mdi:numeric-4-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191548802770000001A6F080809727277070005FC86FB84A|0201021BFF114D1911488027700000016EB8CE48A7F08080972727707000D7");'
-
-  # === 次卧风扇档位 ===
-  - platform: template
-    name: "Bedroom Fan 1 次卧风扇1档"
-    icon: mdi:numeric-1-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D1915F0CF2D70000001FD3FD5CF9D2D2D7070005CBF1D60EC|0201021BFF114D1915F0CF2D70000001FD3FCFCF9D2D2D7070005CBF1D60F2");'
-      
-  - platform: template
-    name: "Bedroom Fan 2 次卧风扇2档"
-    icon: mdi:numeric-2-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F8005CBF1D60F0F0FC3FCFCF17|0201021BFF114D1913F0CF2D70000001F1F0FC3FCFCF9D2D2D7070005CBF1F");'
-      
-  - platform: template
-    name: "Bedroom Fan 3 次卧风扇3档"
-    icon: mdi:numeric-3-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D1917F0CF2D70000001CECF182D2D7070005CBF1D60F0F07B|0201021BFF114D1919F0CF2D700000019C2D2D7070005CBF1D60F0F0FC3FCD");'
-      
-  - platform: template
-    name: "Bedroom Fan 4 次卧风扇4档"
-    icon: mdi:numeric-4-circle
-    entity_category: config
-    on_press:
-      - lambda: 'id(tx).send_hex("0201021BFF114D191BF0CF2D700000012C70F6005CBF1D60F0F0FC3FCFCF15|0201021BFF114D1917F0CF2D70000001CECF9D2D2D7070005CBF1D60F0F0FE");'
-
-# ===================== 传感器 =====================
-sensor:
-  # === 餐厅灯 ===
-  - platform: template
-    name: "Dining Brt 餐厅灯亮度"
-    id: ct_light_brt
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    accuracy_decimals: 0
-    
-  - platform: template
-    name: "Dining CT 餐厅灯色温"
-    id: ct_light_ct
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    
-  # === 餐厅风扇 ===
-  - platform: template
-    name: "Dining Spd 餐厅风扇档位"
-    id: ct_fan_spd
-    icon: mdi:fan-speed-1
-    
-  # === 次卧灯 ===
-  - platform: template
-    name: "Bedroom Brt 次卧灯亮度"
-    id: cw_light_brt
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    accuracy_decimals: 0
-    
-  - platform: template
-    name: "Bedroom CT 次卧灯色温"
-    id: cw_light_ct
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    
-  # === 次卧风扇 ===
-  - platform: template
-    name: "Bedroom Spd 次卧风扇档位"
-    id: cw_fan_spd
-    icon: mdi:fan-speed-1
-    
-  # === 系统状态 ===
-  - platform: uptime
-    name: "Gateway Uptime 运行时间"
-    id: gateway_uptime
-    update_interval: 60s
-    icon: mdi:timer-outline
-    
-  - platform: internal_temperature
-    name: "ESP32 Temp 芯片温度"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    update_interval: 60s
-    icon: mdi:thermometer
-    
-  - platform: wifi_signal
-    name: "WiFi dBm 信号强度"
-    id: wifi_signal_db
-    update_interval: 60s
-    icon: mdi:wifi
-    
-  - platform: copy
-    source_id: wifi_signal_db
-    name: "WiFi Pct 信号百分比"
-    filters:
-      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-    icon: mdi:wifi-strength-4
-
-# ===================== 二进制传感器 =====================
-binary_sensor:
-  - platform: status
-    name: "Gateway Status 网关状态"
-    device_class: connectivity
-    
-  - platform: template
-    name: "Dining Light State 餐厅灯状态"
-    id: ct_light_state
-    device_class: light
-    
-  - platform: template
-    name: "Bedroom Light State 次卧灯状态"
-    id: cw_light_state
-    device_class: light
-    
-  - platform: template
-    name: "Dining Fan State 餐厅风扇状态"
-    id: ct_fan_state
-    device_class: running
-    
-  - platform: template
-    name: "Bedroom Fan State 次卧风扇状态"
-    id: cw_fan_state
-    device_class: running
-
-# ===================== 文本传感器 =====================
-text_sensor:
-  - platform: template
-    name: "Build Time 编译时间"
-    lambda: 'return {"${build_time}"};'
-    icon: mdi:calendar-clock
-    update_interval: 3600s
-    
-  - platform: version
-    name: "ESPHome Ver 版本"
-    hide_timestamp: true
-    
-  - platform: wifi_info
-    ip_address:
-      name: "ESP IP 地址"
-      icon: mdi:ip
-    ssid:
-      name: "ESP SSID WiFi名"
-      icon: mdi:wifi
-    mac_address:
-      name: "ESP MAC 物理地址"
+          MideaController ctrl("F0CF2D700000");
+          id(tx).send_hex(ctrl.make_fan_speed_command(static_cast<int>(speed)));
