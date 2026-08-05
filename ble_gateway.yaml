@@ -40,8 +40,14 @@ ota:
   - platform: esphome
 api:
   reboot_timeout: 0s
+  services:
+    - service: send_raw_hex
+      variables:
+        hex_data: string
+      then:
+        - lambda: |-
+            id(tx).send_hex(hex_data);
 
-# ===================== BLE 组件 =====================
 external_components:
   - source:
       type: local
@@ -159,25 +165,11 @@ esp32_ble_tracker:
                     else id(bemfa).publish("ctlight002/up","off");
                     if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("ctfan003/up","off");
-                    id(ct_light_st).publish_state(light_on);
-                    id(ct_brt_s).publish_state(brt);
-                    id(ct_ct_s).publish_state(ct_k);
-                    id(ct_fan_st).publish_state(fan_run);
-                    id(ct_spd_s).publish_state(fan_spd);
-                    id(ct_light_sw).publish_state(light_on);
-                    id(ct_fan_sw).publish_state(fan_run);
-                    // 🔥 同步原生 light/fan 组件状态
-                    auto lc = id(ct_light).make_call();
-                    lc.set_state(light_on);
-                    if(light_on) {
-                      lc.set_brightness(brt/100.0f);
-                      lc.set_color_temperature(1000000.0f/ct_k);
-                    }
-                    lc.perform();
-                    auto fc = id(ct_fan).make_call();
-                    fc.set_state(fan_run);
-                    if(fan_run) fc.set_speed(fan_spd);
-                    fc.perform();
+                    id(ct_light_on).publish_state(light_on);
+                    id(ct_brt).publish_state(brt);
+                    id(ct_ct).publish_state(ct_k);
+                    id(ct_fan_on).publish_state(fan_run);
+                    id(ct_spd).publish_state(fan_spd);
                   }
                   break;
                 }
@@ -205,123 +197,21 @@ esp32_ble_tracker:
                     else id(bemfa).publish("cwlight002/up","off");
                     if(fan_run) id(bemfa).publish("cwfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("cwfan003/up","off");
-                    id(cw_light_st).publish_state(light_on);
-                    id(cw_brt_s).publish_state(brt);
-                    id(cw_ct_s).publish_state(ct_k);
-                    id(cw_fan_st).publish_state(fan_run);
-                    id(cw_spd_s).publish_state(fan_spd);
-                    id(cw_light_sw).publish_state(light_on);
-                    id(cw_fan_sw).publish_state(fan_run);
-                    // 🔥 同步原生 light/fan 组件状态
-                    auto lc = id(cw_light).make_call();
-                    lc.set_state(light_on);
-                    if(light_on) {
-                      lc.set_brightness(brt/100.0f);
-                      lc.set_color_temperature(1000000.0f/ct_k);
-                    }
-                    lc.perform();
-                    auto fc = id(cw_fan).make_call();
-                    fc.set_state(fan_run);
-                    if(fan_run) fc.set_speed(fan_spd);
-                    fc.perform();
+                    id(cw_light_on).publish_state(light_on);
+                    id(cw_brt).publish_state(brt);
+                    id(cw_ct).publish_state(ct_k);
+                    id(cw_fan_on).publish_state(fan_run);
+                    id(cw_spd).publish_state(fan_spd);
                   }
                   break;
                 }
               }
             }
 
-# ===================== 原生 Light 组件 =====================
-light:
-  - platform: template
-    name: "Dining Light 餐厅灯"
-    id: ct_light
-    color_temperature: true
-    brightness: true
-    cold_white_color_temperature: 6500 K
-    warm_white_color_temperature: 2700 K
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          auto vals = id(ct_light).remote_values;
-          int brt_pct = std::round(vals.get_brightness() * 100.0f);
-          int ct_k = std::round(1000000.0f / vals.get_color_temperature());
-          uint8_t bv = midea_pct_to_val(brt_pct);
-          uint8_t tv = midea_kelvin_to_val(ct_k);
-          id(tx).send_hex(midea_build_cmd("488027700000", {0x5B, bv, tv}, 2, 4));
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));
-
-  - platform: template
-    name: "Bedroom Light 次卧灯"
-    id: cw_light
-    color_temperature: true
-    brightness: true
-    cold_white_color_temperature: 6500 K
-    warm_white_color_temperature: 2700 K
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          auto vals = id(cw_light).remote_values;
-          int brt_pct = std::round(vals.get_brightness() * 100.0f);
-          int ct_k = std::round(1000000.0f / vals.get_color_temperature());
-          uint8_t bv = midea_pct_to_val(brt_pct);
-          uint8_t tv = midea_kelvin_to_val(ct_k);
-          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x5B, bv, tv}, 2, 4));
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));
-
-# ===================== 原生 Fan 组件 =====================
-fan:
-  - platform: template
-    name: "Dining Fan 餐厅风扇"
-    id: ct_fan
-    speed_count: 6
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int spd = id(ct_fan).speed;
-          if(spd == 0) spd = 1;
-          uint8_t cmd; int cf, ef;
-          midea_fan_params(spd, cmd, cf, ef);
-          id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));
-    on_speed_set:
-      - lambda: |-
-          int spd = id(ct_fan).speed;
-          uint8_t cmd; int cf, ef;
-          midea_fan_params(spd, cmd, cf, ef);
-          id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
-
-  - platform: template
-    name: "Bedroom Fan 次卧风扇"
-    id: cw_fan
-    speed_count: 6
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int spd = id(cw_fan).speed;
-          if(spd == 0) spd = 1;
-          uint8_t cmd; int cf, ef;
-          midea_fan_params(spd, cmd, cf, ef);
-          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));
-    on_speed_set:
-      - lambda: |-
-          int spd = id(cw_fan).speed;
-          uint8_t cmd; int cf, ef;
-          midea_fan_params(spd, cmd, cf, ef);
-          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
-
 # ===================== 开关 =====================
 switch:
   - platform: template
-    name: "Dining Light SW"
+    name: "Dining Light"
     id: ct_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -330,10 +220,10 @@ switch:
       - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));'
     turn_off_action:
       - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x06}, 2, 4));'
-    lambda: 'return id(ct_light_st).state;'
+    lambda: 'return id(ct_light_on).state;'
 
   - platform: template
-    name: "Dining Fan SW"
+    name: "Dining Fan"
     id: ct_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -342,10 +232,10 @@ switch:
       - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));'
     turn_off_action:
       - lambda: 'id(tx).send_hex(midea_build_cmd("488027700000", {0x09}, 8, 15));'
-    lambda: 'return id(ct_fan_st).state;'
+    lambda: 'return id(ct_fan_on).state;'
 
   - platform: template
-    name: "Bedroom Light SW"
+    name: "Bedroom Light"
     id: cw_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -354,10 +244,10 @@ switch:
       - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));'
     turn_off_action:
       - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x06}, 2, 4));'
-    lambda: 'return id(cw_light_st).state;'
+    lambda: 'return id(cw_light_on).state;'
 
   - platform: template
-    name: "Bedroom Fan SW"
+    name: "Bedroom Fan"
     id: cw_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -366,34 +256,114 @@ switch:
       - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));'
     turn_off_action:
       - lambda: 'id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x09}, 8, 15));'
-    lambda: 'return id(cw_fan_st).state;'
+    lambda: 'return id(cw_fan_on).state;'
+
+# ===================== Number 滑块（替代 light/fan 的原生控制） =====================
+number:
+  - platform: template
+    name: "Dining Brightness"
+    id: ct_brt_n
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    set_action:
+      - lambda: |-
+          uint8_t bv = midea_pct_to_val((int)x);
+          id(tx).send_hex(midea_build_cmd("488027700000", {0x51, bv}, 2, 4));
+
+  - platform: template
+    name: "Dining ColorTemp"
+    id: ct_ct_n
+    min_value: 2700
+    max_value: 6500
+    step: 100
+    unit_of_measurement: "K"
+    icon: mdi:thermometer
+    set_action:
+      - lambda: |-
+          uint8_t tv = midea_kelvin_to_val((int)x);
+          id(tx).send_hex(midea_build_cmd("488027700000", {0x55, tv}, 2, 4));
+
+  - platform: template
+    name: "Dining Fan Speed"
+    id: ct_spd_n
+    min_value: 1
+    max_value: 6
+    step: 1
+    icon: mdi:fan-speed-1
+    set_action:
+      - lambda: |-
+          uint8_t cmd; int cf, ef;
+          midea_fan_params((int)x, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("488027700000", {cmd}, cf, ef));
+
+  - platform: template
+    name: "Bedroom Brightness"
+    id: cw_brt_n
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    set_action:
+      - lambda: |-
+          uint8_t bv = midea_pct_to_val((int)x);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x51, bv}, 2, 4));
+
+  - platform: template
+    name: "Bedroom ColorTemp"
+    id: cw_ct_n
+    min_value: 2700
+    max_value: 6500
+    step: 100
+    unit_of_measurement: "K"
+    icon: mdi:thermometer
+    set_action:
+      - lambda: |-
+          uint8_t tv = midea_kelvin_to_val((int)x);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {0x55, tv}, 2, 4));
+
+  - platform: template
+    name: "Bedroom Fan Speed"
+    id: cw_spd_n
+    min_value: 1
+    max_value: 6
+    step: 1
+    icon: mdi:fan-speed-1
+    set_action:
+      - lambda: |-
+          uint8_t cmd; int cf, ef;
+          midea_fan_params((int)x, cmd, cf, ef);
+          id(tx).send_hex(midea_build_cmd("F0CF2D700000", {cmd}, cf, ef));
 
 # ===================== 传感器 =====================
 sensor:
   - platform: template
-    name: "Dining Brt Sensor"
-    id: ct_brt_s
+    name: "Dining Brt"
+    id: ct_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "Dining CT Sensor"
-    id: ct_ct_s
+    name: "Dining CT"
+    id: ct_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "Dining Spd Sensor"
-    id: ct_spd_s
+    name: "Dining Spd"
+    id: ct_spd
   - platform: template
-    name: "Bedroom Brt Sensor"
-    id: cw_brt_s
+    name: "Bedroom Brt"
+    id: cw_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "Bedroom CT Sensor"
-    id: cw_ct_s
+    name: "Bedroom CT"
+    id: cw_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "Bedroom Spd Sensor"
-    id: cw_spd_s
+    name: "Bedroom Spd"
+    id: cw_spd
   - platform: uptime
     name: "Uptime"
     update_interval: 60s
@@ -419,20 +389,20 @@ binary_sensor:
     name: "Gateway Online"
     device_class: connectivity
   - platform: template
-    name: "Dining Light State"
-    id: ct_light_st
+    name: "Dining Light On"
+    id: ct_light_on
     device_class: light
   - platform: template
-    name: "Bedroom Light State"
-    id: cw_light_st
-    device_class: light
-  - platform: template
-    name: "Dining Fan State"
-    id: ct_fan_st
+    name: "Dining Fan On"
+    id: ct_fan_on
     device_class: running
   - platform: template
-    name: "Bedroom Fan State"
-    id: cw_fan_st
+    name: "Bedroom Light On"
+    id: cw_light_on
+    device_class: light
+  - platform: template
+    name: "Bedroom Fan On"
+    id: cw_fan_on
     device_class: running
 
 text_sensor:
@@ -448,8 +418,6 @@ text_sensor:
       name: "ESP IP"
     ssid:
       name: "ESP SSID"
-    mac_address:
-      name: "ESP MAC"
 
 button:
   - platform: restart
