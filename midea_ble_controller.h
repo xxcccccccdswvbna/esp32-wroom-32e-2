@@ -67,21 +67,26 @@ inline std::string midea_build_cmd(const std::string &mac,
     return ctrl + "|" + end;
 }
 
-// ========== 灯光命令 ==========
+// ========== 灯光命令（修复版） ==========
+
+// LED 开关
 inline std::string midea_light_toggle(const std::string &mac) {
     return midea_build_cmd(mac, {0x06}, 2, 4);
 }
 
+// 🔥 亮度：改用组合命令 0x5B，色温设为中间值 0x80（约4300K）
 inline std::string midea_light_brightness(const std::string &mac, int pct) {
     uint8_t bv = std::round(pct * 255.0 / 100.0);
-    return midea_build_cmd(mac, {0x51, bv}, 2, 4);
+    return midea_build_cmd(mac, {0x5B, bv, 0x80}, 2, 4);
 }
 
+// 色温：单独使用 0x55 命令
 inline std::string midea_light_color_temp(const std::string &mac, int kelvin) {
     uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
     return midea_build_cmd(mac, {0x55, tv}, 7, 12);
 }
 
+// 亮度+色温组合
 inline std::string midea_light_brightness_color(const std::string &mac, int pct, int kelvin) {
     uint8_t bv = std::round(pct * 255.0 / 100.0);
     uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
