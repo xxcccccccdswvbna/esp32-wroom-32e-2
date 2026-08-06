@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <cstdio>
+#include <algorithm>
 #include <functional>
-#include <Arduino.h>
+#include <esphome/core/hal.h>  // 【修复】替换 Arduino.h，使用 ESPHome 的 HAL 层
 
 // ================================================================
 //                    1. 美的 BLE 协议 - 指令生成 (核心协议)
@@ -210,11 +212,13 @@ static void ble_set_send_function(std::function<void(const std::string&)> fn) { 
 static void mqtt_set_publish_function(std::function<void(const char*, const char*)> fn) { g_mqtt_pub_fn = fn; }
 
 static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) {
-    g_ble_queue.push_back({hex, millis() + delay_ms});
+    // 【修复】使用 esphome::millis()
+    g_ble_queue.push_back({hex, esphome::millis() + delay_ms});
 }
 
 static void ble_queue_process() {
-    if (!g_ble_queue.empty() && millis() >= g_ble_queue[0].send_at && g_ble_send_fn) {
+    // 【修复】使用 esphome::millis()
+    if (!g_ble_queue.empty() && esphome::millis() >= g_ble_queue[0].send_at && g_ble_send_fn) {
         g_ble_send_fn(g_ble_queue[0].hex);
         g_ble_queue.erase(g_ble_queue.begin());
     }
@@ -222,8 +226,9 @@ static void ble_queue_process() {
 
 static void device_publish_bemfa(MideaDevice& dev) {
     if (!g_mqtt_pub_fn) return;
-    if (millis() - dev.last_publish_ms < 200) return; // 节流
-    dev.last_publish_ms = millis();
+    // 【修复】使用 esphome::millis()
+    if (esphome::millis() - dev.last_publish_ms < 200) return; 
+    dev.last_publish_ms = esphome::millis();
     
     std::string lt = std::string(dev.light_topic) + "/up";
     if (dev.light_on) {
@@ -367,7 +372,8 @@ static void tick_ble_queue() {
 
 static void tick_heartbeat() {
     static uint32_t last_hb = 0;
-    if (millis() - last_hb < 60000) return;
-    last_hb = millis();
+    // 【修复】使用 esphome::millis()
+    if (esphome::millis() - last_hb < 60000) return;
+    last_hb = esphome::millis();
     publish_all_devices();
 }
