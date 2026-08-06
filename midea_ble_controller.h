@@ -256,7 +256,7 @@ static void publish_all_devices() {
 
 
 // ================================================================
-//                    5. BLE 广播解析
+//                    5. BLE 广播解析 (带变化检测)
 // ================================================================
 
 static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
@@ -296,17 +296,25 @@ static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
 
         bool lc = dev.update_light(l, b, c);
         bool fc = dev.update_fan(f, s);
-        if (lc || fc) device_publish_bemfa(dev);
-        return idx;
+        
+        // 【关键修改】：只有状态真正发生变化时，才推给巴法云，并返回设备索引
+        if (lc || fc) {
+            device_publish_bemfa(dev);
+            return idx; 
+        }
+        return -1; // 没变化返回 -1
     }
     return -1;
 }
 
-static void parse_ble_advertisement(const std::vector<uint8_t>& raw) {
-    if (raw.size() < 20) return;
+// 【关键修改】：返回发生变化的设备索引 (0-3)，无变化返回 -1
+static int parse_ble_advertisement(const std::vector<uint8_t>& raw) {
+    if (raw.size() < 20) return -1;
     for (int i = 0; i < DEVICE_COUNT; i++) {
-        if (parse_ble_device(raw.data(), raw.size(), i) >= 0) return;
+        int idx = parse_ble_device(raw.data(), raw.size(), i);
+        if (idx >= 0) return idx; 
     }
+    return -1;
 }
 
 
