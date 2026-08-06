@@ -165,16 +165,32 @@ def gen_controls(d):
     mac: "{m}"
     icon: mdi:fan
 """
-        rs+=f"  - platform: template; name: \"{x['name']} Brt\"; id: {n}_brt; unit_of_measurement: \"%\"; accuracy_decimals: 0\n"
-        rs+=f"  - platform: template; name: \"{x['name']} CT\"; id: {n}_ct; unit_of_measurement: \"K\"\n"
-        rs+=f"  - platform: template; name: \"{x['name']} Spd\"; id: {n}_spd\n"
-        rb+=f"  - platform: template; name: \"{x['name']} Light On\"; id: {n}_light_on; device_class: light\n"
-        rb+=f"  - platform: template; name: \"{x['name']} Fan On\"; id: {n}_fan_on; device_class: running\n"
-    rs+="  - platform: uptime; name: Uptime; update_interval: 60s\n"
-    rs+="  - platform: internal_temperature; name: ESP32 Temp; unit_of_measurement: \"°C\"; accuracy_decimals: 1; update_interval: 60s\n"
-    rs+="  - platform: wifi_signal; name: WiFi dBm; id: wifi_signal_db; update_interval: 60s\n"
-    rs+="  - platform: copy; source_id: wifi_signal_db; name: WiFi Pct; filters:\n      - lambda: return min(max(2*(x+100.0),0.0),100.0);\n    unit_of_measurement: \"%\"; accuracy_decimals: 0\n"
-    rb+="  - platform: status; name: Gateway Online; device_class: connectivity\n"
+        rs+=f"  - platform: template\n    name: \"{x['name']} Brt\"\n    id: {n}_brt\n    unit_of_measurement: \"%\"\n    accuracy_decimals: 0\n"
+        rs+=f"  - platform: template\n    name: \"{x['name']} CT\"\n    id: {n}_ct\n    unit_of_measurement: \"K\"\n"
+        rs+=f"  - platform: template\n    name: \"{x['name']} Spd\"\n    id: {n}_spd\n"
+        rb+=f"  - platform: template\n    name: \"{x['name']} Light On\"\n    id: {n}_light_on\n    device_class: light\n"
+        rb+=f"  - platform: template\n    name: \"{x['name']} Fan On\"\n    id: {n}_fan_on\n    device_class: running\n"
+    rs+="""  - platform: uptime
+    name: Uptime
+    update_interval: 60s
+  - platform: internal_temperature
+    name: ESP32 Temp
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+  - platform: wifi_signal
+    name: WiFi dBm
+    id: wifi_signal_db
+    update_interval: 60s
+  - platform: copy
+    source_id: wifi_signal_db
+    name: WiFi Pct
+    filters:
+      - lambda: return min(max(2*(x+100.0),0.0),100.0);
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+"""
+    rb+="  - platform: status\n    name: Gateway Online\n    device_class: connectivity\n"
     return rl+"\n"+rf+"\n"+rs+"\n"+rb
 
 def gen_footer():
