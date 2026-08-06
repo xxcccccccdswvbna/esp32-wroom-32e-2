@@ -90,47 +90,89 @@ mqtt:
     - topic: "ctlight002"
       then:
         - lambda: |-
-            if(x == "on" || x == "off") {
+            if(x == "on") {
+              int ct = id(ct_current_ct_kelvin);
+              int brt = id(ct_brt).state;
+              if(brt < 1) brt = 50;
+              id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
+              id(ct_light_on).publish_state(true);
+              id(ct_brt).publish_state(brt);
+              id(ct_ct).publish_state(ct);
+            } else if(x == "off") {
               id(tx).send_hex(midea_light_toggle("488027700000"));
+              id(ct_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
               int brt = std::stoi(rest.substr(0, rest.find('#')));
               int ct = std::stoi(rest.substr(rest.find('#') + 1));
               id(ct_current_ct_kelvin) = ct;
               id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
+              id(ct_light_on).publish_state(true);
+              id(ct_brt).publish_state(brt);
+              id(ct_ct).publish_state(ct);
             }
 
     - topic: "ctfan003"
       then:
         - lambda: |-
-            if(x == "on" || x == "off") {
+            if(x == "on") {
+              int spd = id(ct_spd).state;
+              if(spd < 1) spd = 1;
+              id(tx).send_hex(midea_fan_speed("488027700000", spd));
+              id(ct_fan_on).publish_state(true);
+              id(ct_spd).publish_state(spd);
+            } else if(x == "off") {
               id(tx).send_hex(midea_fan_toggle("488027700000"));
+              id(ct_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
               id(tx).send_hex(midea_fan_speed("488027700000", s));
+              id(ct_fan_on).publish_state(true);
+              id(ct_spd).publish_state(s);
             }
 
     - topic: "cwlight002"
       then:
         - lambda: |-
-            if(x == "on" || x == "off") {
+            if(x == "on") {
+              int ct = id(cw_current_ct_kelvin);
+              int brt = id(cw_brt).state;
+              if(brt < 1) brt = 50;
+              id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
+              id(cw_light_on).publish_state(true);
+              id(cw_brt).publish_state(brt);
+              id(cw_ct).publish_state(ct);
+            } else if(x == "off") {
               id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
+              id(cw_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
               int brt = std::stoi(rest.substr(0, rest.find('#')));
               int ct = std::stoi(rest.substr(rest.find('#') + 1));
               id(cw_current_ct_kelvin) = ct;
               id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
+              id(cw_light_on).publish_state(true);
+              id(cw_brt).publish_state(brt);
+              id(cw_ct).publish_state(ct);
             }
 
     - topic: "cwfan003"
       then:
         - lambda: |-
-            if(x == "on" || x == "off") {
+            if(x == "on") {
+              int spd = id(cw_spd).state;
+              if(spd < 1) spd = 1;
+              id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
+              id(cw_fan_on).publish_state(true);
+              id(cw_spd).publish_state(spd);
+            } else if(x == "off") {
               id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
+              id(cw_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
               id(tx).send_hex(midea_fan_speed("F0CF2D700000", s));
+              id(cw_fan_on).publish_state(true);
+              id(cw_spd).publish_state(s);
             }
 
 # ===================== BLE 扫描与状态上报 =====================
@@ -175,6 +217,11 @@ esp32_ble_tracker:
                     id(ct_ct).publish_state(ct_k);
                     id(ct_fan_on).publish_state(fan_run);
                     id(ct_spd).publish_state(fan_spd);
+                    id(ct_light_sw).publish_state(light_on);
+                    id(ct_fan_sw).publish_state(fan_run);
+                    id(ct_brt_n).publish_state(brt);
+                    id(ct_ct_n).publish_state(ct_k);
+                    id(ct_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
@@ -208,6 +255,11 @@ esp32_ble_tracker:
                     id(cw_ct).publish_state(ct_k);
                     id(cw_fan_on).publish_state(fan_run);
                     id(cw_spd).publish_state(fan_spd);
+                    id(cw_light_sw).publish_state(light_on);
+                    id(cw_fan_sw).publish_state(fan_run);
+                    id(cw_brt_n).publish_state(brt);
+                    id(cw_ct_n).publish_state(ct_k);
+                    id(cw_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
@@ -223,9 +275,18 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: 'id(tx).send_hex(midea_light_toggle("488027700000"));'
+      - lambda: |-
+          int ct = id(ct_current_ct_kelvin);
+          int brt = id(ct_brt).state;
+          if(brt < 1) brt = 50;
+          id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
+          id(ct_light_on).publish_state(true);
+          id(ct_brt).publish_state(brt);
+          id(ct_ct).publish_state(ct);
     turn_off_action:
-      - lambda: 'id(tx).send_hex(midea_light_toggle("488027700000"));'
+      - lambda: |-
+          id(tx).send_hex(midea_light_toggle("488027700000"));
+          id(ct_light_on).publish_state(false);
     lambda: 'return id(ct_light_on).state;'
 
   - platform: template
@@ -235,9 +296,16 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: 'id(tx).send_hex(midea_fan_toggle("488027700000"));'
+      - lambda: |-
+          int spd = id(ct_spd).state;
+          if(spd < 1) spd = 1;
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
+          id(ct_fan_on).publish_state(true);
+          id(ct_spd).publish_state(spd);
     turn_off_action:
-      - lambda: 'id(tx).send_hex(midea_fan_toggle("488027700000"));'
+      - lambda: |-
+          id(tx).send_hex(midea_fan_toggle("488027700000"));
+          id(ct_fan_on).publish_state(false);
     lambda: 'return id(ct_fan_on).state;'
 
   - platform: template
@@ -247,9 +315,18 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: 'id(tx).send_hex(midea_light_toggle("F0CF2D700000"));'
+      - lambda: |-
+          int ct = id(cw_current_ct_kelvin);
+          int brt = id(cw_brt).state;
+          if(brt < 1) brt = 50;
+          id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
+          id(cw_light_on).publish_state(true);
+          id(cw_brt).publish_state(brt);
+          id(cw_ct).publish_state(ct);
     turn_off_action:
-      - lambda: 'id(tx).send_hex(midea_light_toggle("F0CF2D700000"));'
+      - lambda: |-
+          id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
+          id(cw_light_on).publish_state(false);
     lambda: 'return id(cw_light_on).state;'
 
   - platform: template
@@ -259,9 +336,16 @@ switch:
     optimistic: false
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
-      - lambda: 'id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));'
+      - lambda: |-
+          int spd = id(cw_spd).state;
+          if(spd < 1) spd = 1;
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
+          id(cw_fan_on).publish_state(true);
+          id(cw_spd).publish_state(spd);
     turn_off_action:
-      - lambda: 'id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));'
+      - lambda: |-
+          id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
+          id(cw_fan_on).publish_state(false);
     lambda: 'return id(cw_fan_on).state;'
 
 # ===================== Number 滑块 =====================
@@ -276,8 +360,12 @@ number:
     icon: mdi:brightness-percent
     set_action:
       - lambda: |-
-          int current_ct = id(ct_current_ct_kelvin);
-          id(tx).send_hex(midea_light_brightness("488027700000", (int)x, current_ct));
+          int brt = (int)x;
+          int ct = id(ct_current_ct_kelvin);
+          id(tx).send_hex(midea_light_brightness("488027700000", brt, ct));
+          id(ct_brt).publish_state(brt);
+          id(ct_light_on).publish_state(true);
+          id(ct_light_sw).publish_state(true);
 
   - platform: template
     name: "Dining ColorTemp"
@@ -292,6 +380,7 @@ number:
           int kelvin = (int)x;
           id(ct_current_ct_kelvin) = kelvin;
           id(tx).send_hex(midea_light_color_temp("488027700000", kelvin));
+          id(ct_ct).publish_state(kelvin);
 
   - platform: template
     name: "Dining Fan Speed"
@@ -301,7 +390,12 @@ number:
     step: 1
     icon: mdi:fan-speed-1
     set_action:
-      - lambda: 'id(tx).send_hex(midea_fan_speed("488027700000", (int)x));'
+      - lambda: |-
+          int spd = (int)x;
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
+          id(ct_spd).publish_state(spd);
+          id(ct_fan_on).publish_state(true);
+          id(ct_fan_sw).publish_state(true);
 
   - platform: template
     name: "Bedroom Brightness"
@@ -313,8 +407,12 @@ number:
     icon: mdi:brightness-percent
     set_action:
       - lambda: |-
-          int current_ct = id(cw_current_ct_kelvin);
-          id(tx).send_hex(midea_light_brightness("F0CF2D700000", (int)x, current_ct));
+          int brt = (int)x;
+          int ct = id(cw_current_ct_kelvin);
+          id(tx).send_hex(midea_light_brightness("F0CF2D700000", brt, ct));
+          id(cw_brt).publish_state(brt);
+          id(cw_light_on).publish_state(true);
+          id(cw_light_sw).publish_state(true);
 
   - platform: template
     name: "Bedroom ColorTemp"
@@ -329,6 +427,7 @@ number:
           int kelvin = (int)x;
           id(cw_current_ct_kelvin) = kelvin;
           id(tx).send_hex(midea_light_color_temp("F0CF2D700000", kelvin));
+          id(cw_ct).publish_state(kelvin);
 
   - platform: template
     name: "Bedroom Fan Speed"
@@ -338,7 +437,12 @@ number:
     step: 1
     icon: mdi:fan-speed-1
     set_action:
-      - lambda: 'id(tx).send_hex(midea_fan_speed("F0CF2D700000", (int)x));'
+      - lambda: |-
+          int spd = (int)x;
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
+          id(cw_spd).publish_state(spd);
+          id(cw_fan_on).publish_state(true);
+          id(cw_fan_sw).publish_state(true);
 
 # ===================== 传感器 =====================
 sensor:
