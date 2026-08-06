@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [4-11]
+    branches: [gpt-1]
   workflow_dispatch:
 
 permissions:
