@@ -1,0 +1,30 @@
+gateway:
+  name: ble-gateway
+  wifi_ssid: "CC"
+  wifi_password: "chen1122"
+  bemfa_uid: "97109945d7e24559b3e4ca7a1f8ef160"
+
+devices:
+  - id: dining
+    name: "餐厅"
+    mac: "488027700000"
+    bemfa:
+      light: ctlight002
+      fan: ctfan003
+    timer: true
+    defaults:
+      brightness: 80
+      color_temp: 4500
+      fan_speed: 3
+
+  - id: bedroom
+    name: "卧室"
+    mac: "F0CF2D700000"
+    bemfa:
+      light: cwlight002
+      fan: cwfan003
+    timer: true
+    defaults:
+      brightness: 80
+      color_temp: 4500
+      fan_speed: 3
