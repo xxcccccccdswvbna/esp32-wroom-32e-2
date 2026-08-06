@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [dan-zidingyi]
+    branches: [4-11]
   workflow_dispatch:
 
 permissions:
