@@ -63,6 +63,17 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
+# ===================== 全局变量（记忆色温） =====================
+globals:
+  - id: ct_current_ct_kelvin
+    type: int
+    restore_value: no
+    initial_value: '4600'
+  - id: cw_current_ct_kelvin
+    type: int
+    restore_value: no
+    initial_value: '4600'
+
 # ===================== 巴法云 MQTT =====================
 mqtt:
   id: bemfa
@@ -85,6 +96,7 @@ mqtt:
               std::string rest = x.substr(3);
               int brt = std::stoi(rest.substr(0, rest.find('#')));
               int ct = std::stoi(rest.substr(rest.find('#') + 1));
+              id(ct_current_ct_kelvin) = ct;
               id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
             }
 
@@ -107,6 +119,7 @@ mqtt:
               std::string rest = x.substr(3);
               int brt = std::stoi(rest.substr(0, rest.find('#')));
               int ct = std::stoi(rest.substr(rest.find('#') + 1));
+              id(cw_current_ct_kelvin) = ct;
               id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
             }
 
@@ -152,6 +165,7 @@ esp32_ble_tracker:
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
+                    id(ct_current_ct_kelvin) = ct_k;
                     if(light_on) id(bemfa).publish("ctlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("ctlight002/up","off");
                     if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
@@ -184,6 +198,7 @@ esp32_ble_tracker:
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
+                    id(cw_current_ct_kelvin) = ct_k;
                     if(light_on) id(bemfa).publish("cwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("cwlight002/up","off");
                     if(fan_run) id(bemfa).publish("cwfan003/up","on#"+std::to_string(fan_spd));
@@ -260,7 +275,9 @@ number:
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
-      - lambda: 'id(tx).send_hex(midea_light_brightness("488027700000", (int)x));'
+      - lambda: |-
+          int current_ct = id(ct_current_ct_kelvin);
+          id(tx).send_hex(midea_light_brightness("488027700000", (int)x, current_ct));
 
   - platform: template
     name: "Dining ColorTemp"
@@ -271,7 +288,10 @@ number:
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
-      - lambda: 'id(tx).send_hex(midea_light_color_temp("488027700000", (int)x));'
+      - lambda: |-
+          int kelvin = (int)x;
+          id(ct_current_ct_kelvin) = kelvin;
+          id(tx).send_hex(midea_light_color_temp("488027700000", kelvin));
 
   - platform: template
     name: "Dining Fan Speed"
@@ -292,7 +312,9 @@ number:
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
-      - lambda: 'id(tx).send_hex(midea_light_brightness("F0CF2D700000", (int)x));'
+      - lambda: |-
+          int current_ct = id(cw_current_ct_kelvin);
+          id(tx).send_hex(midea_light_brightness("F0CF2D700000", (int)x, current_ct));
 
   - platform: template
     name: "Bedroom ColorTemp"
@@ -303,7 +325,10 @@ number:
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
-      - lambda: 'id(tx).send_hex(midea_light_color_temp("F0CF2D700000", (int)x));'
+      - lambda: |-
+          int kelvin = (int)x;
+          id(cw_current_ct_kelvin) = kelvin;
+          id(tx).send_hex(midea_light_color_temp("F0CF2D700000", kelvin));
 
   - platform: template
     name: "Bedroom Fan Speed"
