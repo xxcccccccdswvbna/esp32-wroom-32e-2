@@ -94,19 +94,29 @@ mqtt:
               int ct = id(ct_current_ct_kelvin);
               int brt = id(ct_brt).state;
               if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("488027700000", brt, ct));     // 替换原 midea_light_brightness_color
+              id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
               id(ct_brt).publish_state(brt);
               id(ct_ct).publish_state(ct);
             } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("488027700000"));              // 替换原 midea_light_toggle
+              id(tx).send_hex(midea_light_toggle("488027700000"));
               id(ct_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
-              int brt = std::stoi(rest.substr(0, rest.find('#')));
-              int ct = std::stoi(rest.substr(rest.find('#') + 1));
-              id(ct_current_ct_kelvin) = ct;
-              id(tx).send_hex(midea_light_on("488027700000", brt, ct));     // 替换原 midea_light_brightness_color
+              size_t pos = rest.find('#');
+              int brt = std::stoi(rest.substr(0, pos));
+              int ct = id(ct_current_ct_kelvin);
+              if(pos != std::string::npos) {
+                std::string ct_str = rest.substr(pos + 1);
+                if(!ct_str.empty()) {
+                  int parsed_ct = std::stoi(ct_str);
+                  if(parsed_ct >= 2700 && parsed_ct <= 6500) {
+                    ct = parsed_ct;
+                    id(ct_current_ct_kelvin) = ct;
+                  }
+                }
+              }
+              id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
               id(ct_brt).publish_state(brt);
               id(ct_ct).publish_state(ct);
@@ -118,15 +128,15 @@ mqtt:
             if(x == "on") {
               int spd = id(ct_spd).state;
               if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("488027700000", spd));            // 替换原 midea_fan_speed
+              id(tx).send_hex(midea_fan_speed("488027700000", spd));
               id(ct_fan_on).publish_state(true);
               id(ct_spd).publish_state(spd);
             } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("488027700000"));                // 替换原 midea_fan_toggle
+              id(tx).send_hex(midea_fan_toggle("488027700000"));
               id(ct_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("488027700000", s));             // 替换原 midea_fan_speed
+              id(tx).send_hex(midea_fan_speed("488027700000", s));
               id(ct_fan_on).publish_state(true);
               id(ct_spd).publish_state(s);
             }
@@ -138,19 +148,29 @@ mqtt:
               int ct = id(cw_current_ct_kelvin);
               int brt = id(cw_brt).state;
               if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));     // 替换原 midea_light_brightness_color
+              id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
               id(cw_brt).publish_state(brt);
               id(cw_ct).publish_state(ct);
             } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("F0CF2D700000"));              // 替换原 midea_light_toggle
+              id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
               id(cw_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
-              int brt = std::stoi(rest.substr(0, rest.find('#')));
-              int ct = std::stoi(rest.substr(rest.find('#') + 1));
-              id(cw_current_ct_kelvin) = ct;
-              id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));     // 替换原 midea_light_brightness_color
+              size_t pos = rest.find('#');
+              int brt = std::stoi(rest.substr(0, pos));
+              int ct = id(cw_current_ct_kelvin);
+              if(pos != std::string::npos) {
+                std::string ct_str = rest.substr(pos + 1);
+                if(!ct_str.empty()) {
+                  int parsed_ct = std::stoi(ct_str);
+                  if(parsed_ct >= 2700 && parsed_ct <= 6500) {
+                    ct = parsed_ct;
+                    id(cw_current_ct_kelvin) = ct;
+                  }
+                }
+              }
+              id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
               id(cw_brt).publish_state(brt);
               id(cw_ct).publish_state(ct);
@@ -162,15 +182,15 @@ mqtt:
             if(x == "on") {
               int spd = id(cw_spd).state;
               if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));            // 替换原 midea_fan_speed
+              id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
               id(cw_fan_on).publish_state(true);
               id(cw_spd).publish_state(spd);
             } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("F0CF2D700000"));                // 替换原 midea_fan_toggle
+              id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
               id(cw_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("F0CF2D700000", s));             // 替换原 midea_fan_speed
+              id(tx).send_hex(midea_fan_speed("F0CF2D700000", s));
               id(cw_fan_on).publish_state(true);
               id(cw_spd).publish_state(s);
             }
@@ -207,7 +227,6 @@ esp32_ble_tracker:
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
-                    id(ct_current_ct_kelvin) = ct_k;
                     if(light_on) id(bemfa).publish("ctlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("ctlight002/up","off");
                     if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
@@ -245,7 +264,6 @@ esp32_ble_tracker:
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
-                    id(cw_current_ct_kelvin) = ct_k;
                     if(light_on) id(bemfa).publish("cwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("cwlight002/up","off");
                     if(fan_run) id(bemfa).publish("cwfan003/up","on#"+std::to_string(fan_spd));
@@ -279,13 +297,13 @@ switch:
           int ct = id(ct_current_ct_kelvin);
           int brt = id(ct_brt).state;
           if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("488027700000", brt, ct));     // 替换原 midea_light_brightness_color
+          id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
           id(ct_light_on).publish_state(true);
           id(ct_brt).publish_state(brt);
           id(ct_ct).publish_state(ct);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_light_off("488027700000"));              // 替换原 midea_light_toggle
+          id(tx).send_hex(midea_light_toggle("488027700000"));
           id(ct_light_on).publish_state(false);
     lambda: 'return id(ct_light_on).state;'
 
@@ -299,12 +317,12 @@ switch:
       - lambda: |-
           int spd = id(ct_spd).state;
           if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("488027700000", spd));            // 替换原 midea_fan_speed
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
           id(ct_fan_on).publish_state(true);
           id(ct_spd).publish_state(spd);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_fan_off("488027700000"));                // 替换原 midea_fan_toggle
+          id(tx).send_hex(midea_fan_toggle("488027700000"));
           id(ct_fan_on).publish_state(false);
     lambda: 'return id(ct_fan_on).state;'
 
@@ -319,13 +337,13 @@ switch:
           int ct = id(cw_current_ct_kelvin);
           int brt = id(cw_brt).state;
           if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));     // 替换原 midea_light_brightness_color
+          id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
           id(cw_light_on).publish_state(true);
           id(cw_brt).publish_state(brt);
           id(cw_ct).publish_state(ct);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_light_off("F0CF2D700000"));              // 替换原 midea_light_toggle
+          id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
           id(cw_light_on).publish_state(false);
     lambda: 'return id(cw_light_on).state;'
 
@@ -339,12 +357,12 @@ switch:
       - lambda: |-
           int spd = id(cw_spd).state;
           if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));            // 替换原 midea_fan_speed
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
           id(cw_fan_on).publish_state(true);
           id(cw_spd).publish_state(spd);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_fan_off("F0CF2D700000"));                // 替换原 midea_fan_toggle
+          id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
           id(cw_fan_on).publish_state(false);
     lambda: 'return id(cw_fan_on).state;'
 
@@ -392,7 +410,7 @@ number:
     set_action:
       - lambda: |-
           int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("488027700000", spd));            // 替换原 midea_fan_speed
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
           id(ct_spd).publish_state(spd);
           id(ct_fan_on).publish_state(true);
           id(ct_fan_sw).publish_state(true);
@@ -439,7 +457,7 @@ number:
     set_action:
       - lambda: |-
           int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));            // 替换原 midea_fan_speed
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
           id(cw_spd).publish_state(spd);
           id(cw_fan_on).publish_state(true);
           id(cw_fan_sw).publish_state(true);
