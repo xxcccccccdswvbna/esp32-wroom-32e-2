@@ -93,7 +93,6 @@ def gen_mqtt(c,d):
 
     for x in d:
         n=x['name'].lower(); m=x['mac']; lt=x['bemfa_light_topic']; ft=x['bemfa_fan_topic']
-        # 灯光
         lines.append(f"""    - topic: "{lt}"
       then:
         - lambda: |-
@@ -102,7 +101,6 @@ def gen_mqtt(c,d):
             else if(x.find("on#")==0){{ auto r=x.substr(3); auto p=r.find('#'); int brt=std::stoi(r.substr(0,p)),ct=id({n}_ct_kelvin);
               if(p!=std::string::npos){{ auto s=r.substr(p+1); if(!s.empty()){{ int pc=std::stoi(s); if(pc>=2700&&pc<=6500){{ct=pc;id({n}_ct_kelvin)=ct;}}}}}}
               id(tx).send_hex(midea_light_on("{m}",brt,ct)); id({n}_light_on).publish_state(true); }}""")
-        # 风扇
         lines.append(f"""    - topic: "{ft}"
       then:
         - lambda: |-
