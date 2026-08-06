@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install esphome
-      - run: python generate.py
+      # 🔥 已移除 python generate.py，直接编译已有的 YAML
       - name: Get Device Name
         id: device
         run: |
