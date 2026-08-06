@@ -1,10 +1,10 @@
 # ===================== 项目配置 =====================
 substitutions:
-  project_name: "byy1"
+  project_name: "cct1"
   build_time: "Unknown"
 
 esphome:
-  name: ble-2
+  name: ble-6
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
   includes:
