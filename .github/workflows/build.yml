@@ -1,119 +1,52 @@
 name: Build and Release
-
 on:
   push:
     branches: [esp32-1]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install ESPHome
-        run: pip install esphome
-
-      # 🔥 新增：运行生成脚本
-      - name: Generate YAML from devices.json
-        run: |
-          echo "正在从 devices.json 生成 ble_gateway.yaml..."
-          python generate.py
-          echo "生成完成！"
-          echo "--- 设备列表 ---"
-          grep -E "name:.*(Light|Fan)" ble_gateway.yaml | head -20
-
+      - run: pip install esphome
+      - run: python generate.py
       - name: Get Device Name
         id: device
         run: |
-          DEVICE_NAME=$(grep -m 1 -w 'name:' ble_gateway.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
-          if [ -z "$DEVICE_NAME" ]; then
-            echo "ERROR: Failed to extract device name!"
-            exit 1
-          fi
-          echo "Extracted device name: $DEVICE_NAME"
+          DEVICE_NAME=$(grep -m1 -w 'name:' ble_gateway.yaml | awk '{print $2}')
           echo "name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Inject Build Timestamp
-        run: |
+      - run: |
           BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          echo "Build time: $BUILD_TIME"
           sed -i "s/build_time: .*/build_time: \"$BUILD_TIME\"/" ble_gateway.yaml || true
-          grep "build_time:" ble_gateway.yaml || echo "Warning: Could not verify build_time in YAML"
-
-      - name: Compile ESPHome Firmware
-        run: esphome compile ble_gateway.yaml
-
-      - name: Generate Version Tag
+      - run: esphome compile ble_gateway.yaml
+      - name: Version
         id: version
         run: |
           VERSION="v$(date -u +'%Y.%m%d.%H%M')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Generated version: $VERSION"
-
-      - name: Collect Firmware
-        run: |
-          set -e
+      - run: |
           mkdir -p out
-          DEVICE_NAME="${{ steps.device.outputs.name }}"
-          BRANCH="${{ github.ref_name }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          BUILD_DIR=".esphome/build/${DEVICE_NAME}/.pioenvs/${DEVICE_NAME}"
-          OTA_FILE="${DEVICE_NAME}-${BRANCH}-${VERSION}.bin"
-          FACTORY_FILE="${DEVICE_NAME}-${BRANCH}-${VERSION}.factory.bin"
-          cp "${BUILD_DIR}/firmware.bin" "out/${OTA_FILE}"
-          if [ -f "${BUILD_DIR}/firmware.factory.bin" ]; then
-            cp "${BUILD_DIR}/firmware.factory.bin" "out/${FACTORY_FILE}"
-          else
-            echo "WARNING: firmware.factory.bin was not generated."
-          fi
-          echo "Generated firmware:"
-          ls -lh out/
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+          DEV=${{ steps.device.outputs.name }}
+          BR=${{ github.ref_name }}
+          VER=${{ steps.version.outputs.version }}
+          BDIR=".esphome/build/${DEV}/.pioenvs/${DEV}"
+          cp "${BDIR}/firmware.bin" "out/${DEV}-${BR}-${VER}.bin"
+          [ -f "${BDIR}/firmware.factory.bin" ] && cp "${BDIR}/firmware.factory.bin" "out/${DEV}-${BR}-${VER}.factory.bin"
+      - uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ github.ref_name }}-${{ steps.version.outputs.version }}
           path: out/
-          if-no-files-found: error
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "🚀 ${{ steps.device.outputs.name }} ${{ github.ref_name }} ${{ steps.version.outputs.version }}"
-          body: |
-            ## 📦 ESPHome 自动构建
-
-            | 项目 | 信息 |
-            |---|---|
-            | 设备 | `${{ steps.device.outputs.name }}` |
-            | 分支 | `${{ github.ref_name }}` |
-            | 版本 | `${{ steps.version.outputs.version }}` |
-            | Commit | `${{ github.sha }}` |
-
-            ## 📥 固件说明
-
-            | 固件 | 用途 |
-            |---|---|
-            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.bin` | OTA 在线升级 |
-            | `${{ steps.device.outputs.name }}-${{ github.ref_name }}-${{ steps.version.outputs.version }}.factory.bin` | 首次 USB/串口烧录 |
-
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            out/*.bin
+          name: "${{ steps.device.outputs.name }} ${{ steps.version.outputs.version }}"
+          body: "Auto build from ${{ github.ref_name }}"
+          files: out/*.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
