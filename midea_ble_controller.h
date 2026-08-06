@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <cstring>
 
 // ========== 加密表生成 ==========
 inline std::vector<uint8_t> midea_encode_table(const std::string &mac) {
@@ -56,7 +57,7 @@ inline std::string midea_end_packet(const std::string &mac, int flag) {
     return midea_make_packet(mac, {0x00}, flag);
 }
 
-// ========== 生成完整命令 ==========
+// ========== 生成完整命令（CMD + END） ==========
 inline std::string midea_build_cmd(const std::string &mac, 
                                     const std::vector<uint8_t> &values, 
                                     int ctrl_f, int end_f) {
@@ -73,7 +74,13 @@ inline uint8_t midea_pct_to_val(int pct) {
 }
 
 // ========== 灯光命令 ==========
-inline std::string midea_light_toggle(const std::string &mac) {
+inline std::string midea_light_on(const std::string &mac, int pct, int kelvin) {
+    uint8_t bv = midea_pct_to_val(pct);
+    uint8_t tv = midea_kelvin_to_val(kelvin);
+    return midea_build_cmd(mac, {0x5B, bv, tv}, 2, 4);
+}
+
+inline std::string midea_light_off(const std::string &mac) {
     return midea_build_cmd(mac, {0x06}, 2, 4);
 }
 
@@ -88,18 +95,8 @@ inline std::string midea_light_color_temp(const std::string &mac, int kelvin) {
     return midea_build_cmd(mac, {0x55, tv}, 7, 12);
 }
 
-inline std::string midea_light_brightness_color(const std::string &mac, int pct, int kelvin) {
-    uint8_t bv = midea_pct_to_val(pct);
-    uint8_t tv = midea_kelvin_to_val(kelvin);
-    return midea_build_cmd(mac, {0x5B, bv, tv}, 2, 4);
-}
-
 // ========== 风扇命令 ==========
-inline std::string midea_fan_toggle(const std::string &mac) {
-    return midea_build_cmd(mac, {0x09}, 8, 15);
-}
-
-inline std::string midea_fan_speed(const std::string &mac, int speed) {
+inline std::string midea_fan_on(const std::string &mac, int speed) {
     uint8_t cmd; int cf, ef;
     switch(speed) {
         case 1: cmd=0x19; cf=10; ef=7;  break;
@@ -111,4 +108,8 @@ inline std::string midea_fan_speed(const std::string &mac, int speed) {
         default: return "";
     }
     return midea_build_cmd(mac, {cmd}, cf, ef);
+}
+
+inline std::string midea_fan_off(const std::string &mac) {
+    return midea_build_cmd(mac, {0x09}, 8, 15);
 }
