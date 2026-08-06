@@ -1,8 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import light
-from esphome.const import CONF_ID, CONF_NAME, CONF_MAC
-from esphome.core import CORE
+from esphome.const import CONF_ID, CONF_MAC
 
 DEPENDENCIES = ['ble_tx']
 
@@ -19,10 +18,3 @@ async def to_code(config):
     await cg.register_component(var, config)
     await light.register_light(var, config)
     cg.add(var.set_mac(config[CONF_MAC]))
-    
-    # 注入头文件
-    CORE.add_include('midea_ble_controller.h')
-    CORE.add_include('ble_tx.h')
-    
-    # 注册类定义
-    cg.add_define('MIDEA_LIGHT_DEFINED')
