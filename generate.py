@@ -14,37 +14,61 @@ substitutions:
 esphome:
   name: ble-2
   friendly_name: "${{project_name}}"
-  includes: [midea_ble_controller.h]
+  includes:
+    - midea_ble_controller.h
 
 esp32:
-  board: esp32dev; flash_size: 4MB
+  board: esp32dev
+  flash_size: 4MB
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_FREERTOS_UNICORE: y; CONFIG_BT_ENABLED: y; CONFIG_BT_BLE_ENABLED: y
+      CONFIG_FREERTOS_UNICORE: y
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_BLE_ENABLED: y
 
-logger: { baud_rate: 0; level: INFO }
+logger:
+  baud_rate: 0
+  level: INFO
 
 wifi:
-  ssid: "{c['wifi_ssid']}"; password: "{c['wifi_password']}"
-  fast_connect: true; power_save_mode: none
-  ap: {{ ssid: "BLE-GW Fallback"; password: "12345678" }}
+  ssid: "{c['wifi_ssid']}"
+  password: "{c['wifi_password']}"
+  fast_connect: true
+  power_save_mode: none
+  ap:
+    ssid: "BLE-GW Fallback"
+    password: "12345678"
 
 captive_portal:
-web_server: { port: 80 }
-ota: [platform: esphome]
+web_server:
+  port: 80
+ota:
+  - platform: esphome
 api:
   reboot_timeout: 0s
   services:
     - service: send_raw_hex
-      variables: {{ hex_data: string }}
-      then: [lambda: 'id(tx).send_hex(hex_data);']
+      variables:
+        hex_data: string
+      then:
+        - lambda: 'id(tx).send_hex(hex_data);'
 
-external_components: [source: {{ type: local; path: components }}]
+external_components:
+  - source:
+      type: local
+      path: components
 
-ble_tx: { id: tx }
-esp32_ble: { io_capability: none; enable_on_boot: true }
-bluetooth_proxy: { active: true; cache_services: true }
+ble_tx:
+  id: tx
+
+esp32_ble:
+  io_capability: none
+  enable_on_boot: true
+
+bluetooth_proxy:
+  active: true
+  cache_services: true
 """
 
 def gen_globals(d):
@@ -54,9 +78,16 @@ def gen_globals(d):
 
 def gen_mqtt(c,d):
     r=f"""mqtt:
-  id: bemfa; broker: bemfa.com; port: 9501
-  username: "{c['bemfa_uid']}"; password: "{c['bemfa_uid']}"; client_id: "{c['bemfa_uid']}"
-  keepalive: 30s; discovery: false; birth_message:; will_message:
+  id: bemfa
+  broker: bemfa.com
+  port: 9501
+  username: "{c['bemfa_uid']}"
+  password: "{c['bemfa_uid']}"
+  client_id: "{c['bemfa_uid']}"
+  keepalive: 30s
+  discovery: false
+  birth_message:
+  will_message:
   on_message:
 """
     for x in d:
@@ -80,7 +111,10 @@ def gen_mqtt(c,d):
 
 def gen_ble(d):
     r="""esp32_ble_tracker:
-  scan_parameters: { interval: 640ms; window: 30ms; active: false }
+  scan_parameters:
+    interval: 640ms
+    window: 30ms
+    active: false
   on_ble_advertise:
     - then:
         - lambda: |-
@@ -95,12 +129,12 @@ def gen_ble(d):
                 bool lo=(raw[i+7]==0x01); int br=(int)(raw[i+12]/255.0f*100.0f);
                 int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
                 uint8_t fs=raw[i+16]; bool fr=(fs&0x01)!=0; int sp=fr?(raw[i+17]+1):0;
-                static bool ll=false,lfr=false; static int lb=-1,lc=-1,lfs=-1;
-                static uint32_t lr=0,lch=0; static uint8_t rc=0;
-                bool ch=(lo!=ll)||(br!=lb)||(ct!=lc)||(fr!=lfr)||(sp!=lfs);
-                if(ch){{lch=millis();rc=0;ll=lo;lb=br;lc=ct;lfr=fr;lfs=sp;}}
-                bool hb=(millis()-lr>60000),rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
-                if(ch||hb||rt){{ if(rt)rc++;else rc=0; lr=millis();
+                static bool {n}_ll=false,{n}_lfr=false; static int {n}_lb=-1,{n}_lc=-1,{n}_lfs=-1;
+                static uint32_t {n}_lr=0,{n}_lch=0; static uint8_t {n}_rc=0;
+                bool ch=(lo!={n}_ll)||(br!={n}_lb)||(ct!={n}_lc)||(fr!={n}_lfr)||(sp!={n}_lfs);
+                if(ch){{{n}_lch=millis();{n}_rc=0;{n}_ll=lo;{n}_lb=br;{n}_lc=ct;{n}_lfr=fr;{n}_lfs=sp;}}
+                bool hb=(millis()-{n}_lr>60000),rt=(millis()-{n}_lch<10000)&&({n}_rc<3)&&(millis()-{n}_lr>3000);
+                if(ch||hb||rt){{ if(rt){n}_rc++;else {n}_rc=0; {n}_lr=millis();
                   if(lo)id(bemfa).publish("{lt}/up","on#"+std::to_string(br)+"#"+std::to_string(ct));
                   else id(bemfa).publish("{lt}/up","off");
                   if(fr)id(bemfa).publish("{ft}/up","on#"+std::to_string(sp));
@@ -108,9 +142,6 @@ def gen_ble(d):
                   id({n}_light_on).publish_state(lo); id({n}_brt).publish_state(br);
                   id({n}_ct).publish_state(ct); id({n}_fan_on).publish_state(fr);
                   id({n}_spd).publish_state(sp);
-                  id({n}_light).publish_state(lo); id({n}_light).publish_brightness(br/100.0f);
-                  id({n}_light).publish_color_temperature(1000000.0f/ct);
-                  id({n}_fan).publish_state(fr); id({n}_fan).publish_speed(sp);
                 }}
                 break;
               }}}}
@@ -140,20 +171,33 @@ def gen_controls(d):
         rb+=f"  - platform: template; name: \"{x['name']} Light On\"; id: {n}_light_on; device_class: light\n"
         rb+=f"  - platform: template; name: \"{x['name']} Fan On\"; id: {n}_fan_on; device_class: running\n"
     rs+="  - platform: uptime; name: Uptime; update_interval: 60s\n"
-    rs+="  - platform: internal_temperature; name: ESP32 Temp; unit_of_measurement: °C; accuracy_decimals: 1; update_interval: 60s\n"
+    rs+="  - platform: internal_temperature; name: ESP32 Temp; unit_of_measurement: \"°C\"; accuracy_decimals: 1; update_interval: 60s\n"
     rs+="  - platform: wifi_signal; name: WiFi dBm; id: wifi_signal_db; update_interval: 60s\n"
-    rs+="  - platform: copy; source_id: wifi_signal_db; name: WiFi Pct; filters: [lambda: return min(max(2*(x+100.0),0.0),100.0);]; unit_of_measurement: %; accuracy_decimals: 0\n"
+    rs+="  - platform: copy; source_id: wifi_signal_db; name: WiFi Pct; filters:\n      - lambda: return min(max(2*(x+100.0),0.0),100.0);\n    unit_of_measurement: \"%\"; accuracy_decimals: 0\n"
     rb+="  - platform: status; name: Gateway Online; device_class: connectivity\n"
     return rl+"\n"+rf+"\n"+rs+"\n"+rb
 
 def gen_footer():
     return """
 text_sensor:
-  - platform: template; name: Build Time; lambda: 'return {"${build_time}"};'; update_interval: 3600s
-  - platform: version; name: ESPHome Ver; hide_timestamp: true
-  - platform: wifi_info; ip_address: { name: ESP IP }; ssid: { name: ESP SSID }
+  - platform: template
+    name: Build Time
+    lambda: 'return {"${build_time}"};'
+    update_interval: 3600s
+  - platform: version
+    name: ESPHome Ver
+    hide_timestamp: true
+  - platform: wifi_info
+    ip_address:
+      name: ESP IP
+    ssid:
+      name: ESP SSID
+
 button:
-  - platform: restart; name: Restart GW; icon: mdi:restart; entity_category: diagnostic
+  - platform: restart
+    name: Restart GW
+    icon: mdi:restart
+    entity_category: diagnostic
 """
 
 def main():
