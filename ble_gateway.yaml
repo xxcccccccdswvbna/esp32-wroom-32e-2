@@ -386,48 +386,16 @@ esp32_ble_tracker:
               uint8_t zzw_mac[6] = {0x92, 0x26, 0x35, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], zzw_mac, 6) == 0) {
-                  int remaining = (int)raw.size() - i;
-                  if (remaining < 16) break;
-                  bool light_on = false;
-                  int brt = 0;
-                  int ct_k = 2700;
-                  bool fan_run = false;
-                  int fan_spd = 0;
-                  uint8_t mode = raw[i+8];
-                  bool alt_valid = (mode == 0x10 || mode == 0x11 || mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-                  if (alt_valid) {
-                    light_on = (mode == 0x11 || mode == 0x13 || mode == 0x21 || mode == 0x33);
-                    fan_run = (mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-                    brt = (int)(raw[i+11] / 255.0f * 100.0f);
-                    ct_k = 2700 + (6500-2700) * (int)(raw[i+12] / 255.0f * 100.0f) / 100;
-                    fan_spd = fan_run ? (raw[i+15] + 1) : 0;
-                  } else {
-                    if (remaining >= 8) light_on = (raw[i+7] == 0x01);
-                    if (remaining >= 13) brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                    if (remaining >= 14) ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                    if (remaining >= 17) {
-                      uint8_t fs = raw[i+16];
-                      fan_run = (fs & 0x01) != 0;
-                    }
-                    if (remaining >= 18 && fan_run) fan_spd = raw[i+17] + 1;
-                  }
-                  if (fan_run) {
-                    if (fan_spd < 1 || fan_spd > 6) {
-                      int fixed_speed = 0;
-                      if (remaining >= 16) {
-                        int s15 = raw[i+15] + 1;
-                        if (s15 >= 1 && s15 <= 6) fixed_speed = s15;
-                      }
-                      if (fixed_speed == 0 && remaining >= 18) {
-                        int s17 = raw[i+17] + 1;
-                        if (s17 >= 1 && s17 <= 6) fixed_speed = s17;
-                      }
-                      if (fixed_speed >= 1 && fixed_speed <= 6) fan_spd = fixed_speed;
-                      else fan_spd = 1;
-                    }
-                  } else {
-                    fan_spd = 0;
-                  }
+                  bool light_on = (raw[i+7] == 0x01);
+                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
+                  uint8_t fs = raw[i+16];
+                  bool fan_run = (fs & 0x01) != 0;
+                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+                  
+                  // 【关键修复】：强制修正乱跳的风速，如果读到 41 这种离谱数据，就强行设为 1档
+                  if (fan_spd > 6 || fan_spd < 1) { fan_spd = fan_run ? 1 : 0; }
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -453,48 +421,16 @@ esp32_ble_tracker:
               uint8_t kkt_mac[6] = {0xCD, 0xAB, 0x38, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], kkt_mac, 6) == 0) {
-                  int remaining = (int)raw.size() - i;
-                  if (remaining < 16) break;
-                  bool light_on = false;
-                  int brt = 0;
-                  int ct_k = 2700;
-                  bool fan_run = false;
-                  int fan_spd = 0;
-                  uint8_t mode = raw[i+8];
-                  bool alt_valid = (mode == 0x10 || mode == 0x11 || mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-                  if (alt_valid) {
-                    light_on = (mode == 0x11 || mode == 0x13 || mode == 0x21 || mode == 0x33);
-                    fan_run = (mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-                    brt = (int)(raw[i+11] / 255.0f * 100.0f);
-                    ct_k = 2700 + (6500-2700) * (int)(raw[i+12] / 255.0f * 100.0f) / 100;
-                    fan_spd = fan_run ? (raw[i+15] + 1) : 0;
-                  } else {
-                    if (remaining >= 8) light_on = (raw[i+7] == 0x01);
-                    if (remaining >= 13) brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                    if (remaining >= 14) ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                    if (remaining >= 17) {
-                      uint8_t fs = raw[i+16];
-                      fan_run = (fs & 0x01) != 0;
-                    }
-                    if (remaining >= 18 && fan_run) fan_spd = raw[i+17] + 1;
-                  }
-                  if (fan_run) {
-                    if (fan_spd < 1 || fan_spd > 6) {
-                      int fixed_speed = 0;
-                      if (remaining >= 16) {
-                        int s15 = raw[i+15] + 1;
-                        if (s15 >= 1 && s15 <= 6) fixed_speed = s15;
-                      }
-                      if (fixed_speed == 0 && remaining >= 18) {
-                        int s17 = raw[i+17] + 1;
-                        if (s17 >= 1 && s17 <= 6) fixed_speed = s17;
-                      }
-                      if (fixed_speed >= 1 && fixed_speed <= 6) fan_spd = fixed_speed;
-                      else fan_spd = 1;
-                    }
-                  } else {
-                    fan_spd = 0;
-                  }
+                  bool light_on = (raw[i+7] == 0x01);
+                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
+                  uint8_t fs = raw[i+16];
+                  bool fan_run = (fs & 0x01) != 0;
+                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+                  
+                  // 【关键修复】：强制修正乱跳的风速，如果读到 41 这种离谱数据，就强行设为 1档
+                  if (fan_spd > 6 || fan_spd < 1) { fan_spd = fan_run ? 1 : 0; }
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
