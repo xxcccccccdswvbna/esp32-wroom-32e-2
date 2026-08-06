@@ -601,7 +601,9 @@ number:
   - platform: template
     name: "Dining Brightness"
     id: ct_brt_n
-    min_value: 1; max_value: 100; step: 1
+    min_value: 1
+    max_value: 100
+    step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -615,7 +617,9 @@ number:
   - platform: template
     name: "Dining ColorTemp"
     id: ct_ct_n
-    min_value: 2700; max_value: 6500; step: 100
+    min_value: 2700
+    max_value: 6500
+    step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
@@ -627,7 +631,9 @@ number:
   - platform: template
     name: "Dining Fan Speed"
     id: ct_spd_n
-    min_value: 1; max_value: 6; step: 1
+    min_value: 1
+    max_value: 6
+    step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -640,7 +646,9 @@ number:
   - platform: template
     name: "Bedroom Brightness"
     id: cw_brt_n
-    min_value: 1; max_value: 100; step: 1
+    min_value: 1
+    max_value: 100
+    step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -654,7 +662,9 @@ number:
   - platform: template
     name: "Bedroom ColorTemp"
     id: cw_ct_n
-    min_value: 2700; max_value: 6500; step: 100
+    min_value: 2700
+    max_value: 6500
+    step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
@@ -666,7 +676,9 @@ number:
   - platform: template
     name: "Bedroom Fan Speed"
     id: cw_spd_n
-    min_value: 1; max_value: 6; step: 1
+    min_value: 1
+    max_value: 6
+    step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -679,7 +691,9 @@ number:
   - platform: template
     name: "主卧 Brightness"
     id: zzw_brt_n
-    min_value: 1; max_value: 100; step: 1
+    min_value: 1
+    max_value: 100
+    step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -693,7 +707,9 @@ number:
   - platform: template
     name: "主卧 ColorTemp"
     id: zzw_ct_n
-    min_value: 2700; max_value: 6500; step: 100
+    min_value: 2700
+    max_value: 6500
+    step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
@@ -705,7 +721,9 @@ number:
   - platform: template
     name: "主卧 Fan Speed"
     id: zzw_spd_n
-    min_value: 1; max_value: 6; step: 1
+    min_value: 1
+    max_value: 6
+    step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -718,7 +736,9 @@ number:
   - platform: template
     name: "客厅 Brightness"
     id: kkt_brt_n
-    min_value: 1; max_value: 100; step: 1
+    min_value: 1
+    max_value: 100
+    step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -732,7 +752,9 @@ number:
   - platform: template
     name: "客厅 ColorTemp"
     id: kkt_ct_n
-    min_value: 2700; max_value: 6500; step: 100
+    min_value: 2700
+    max_value: 6500
+    step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
@@ -744,7 +766,9 @@ number:
   - platform: template
     name: "客厅 Fan Speed"
     id: kkt_spd_n
-    min_value: 1; max_value: 6; step: 1
+    min_value: 1
+    max_value: 6
+    step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -757,61 +781,126 @@ number:
 # ===================== 传感器 =====================
 sensor:
   - platform: template
-    name: "Dining Brt"; id: ct_brt
-    unit_of_measurement: "%"; accuracy_decimals: 0
+    name: "Dining Brt"
+    id: ct_brt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
   - platform: template
-    name: "Dining CT"; id: ct_ct; unit_of_measurement: "K"
+    name: "Dining CT"
+    id: ct_ct
+    unit_of_measurement: "K"
   - platform: template
-    name: "Dining Spd"; id: ct_spd
+    name: "Dining Spd"
+    id: ct_spd
   - platform: template
-    name: "Bedroom Brt"; id: cw_brt
-    unit_of_measurement: "%"; accuracy_decimals: 0
+    name: "Bedroom Brt"
+    id: cw_brt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
   - platform: template
-    name: "Bedroom CT"; id: cw_ct; unit_of_measurement: "K"
+    name: "Bedroom CT"
+    id: cw_ct
+    unit_of_measurement: "K"
   - platform: template
-    name: "Bedroom Spd"; id: cw_spd
+    name: "Bedroom Spd"
+    id: cw_spd
   - platform: template
-    name: "主卧 Brt"; id: zzw_brt
-    unit_of_measurement: "%"; accuracy_decimals: 0
+    name: "主卧 Brt"
+    id: zzw_brt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
   - platform: template
-    name: "主卧 CT"; id: zzw_ct; unit_of_measurement: "K"
+    name: "主卧 CT"
+    id: zzw_ct
+    unit_of_measurement: "K"
   - platform: template
-    name: "主卧 Spd"; id: zzw_spd
+    name: "主卧 Spd"
+    id: zzw_spd
   - platform: template
-    name: "客厅 Brt"; id: kkt_brt
-    unit_of_measurement: "%"; accuracy_decimals: 0
+    name: "客厅 Brt"
+    id: kkt_brt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
   - platform: template
-    name: "客厅 CT"; id: kkt_ct; unit_of_measurement: "K"
+    name: "客厅 CT"
+    id: kkt_ct
+    unit_of_measurement: "K"
   - platform: template
-    name: "客厅 Spd"; id: kkt_spd
-  - platform: uptime; name: "Uptime"; update_interval: 60s
-  - platform: internal_temperature; name: "ESP32 Temp"
-    unit_of_measurement: "°C"; accuracy_decimals: 1; update_interval: 60s
-  - platform: wifi_signal; name: "WiFi dBm"; id: wifi_signal_db; update_interval: 60s
+    name: "客厅 Spd"
+    id: kkt_spd
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+  - platform: internal_temperature
+    name: "ESP32 Temp"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: 60s
+  - platform: wifi_signal
+    name: "WiFi dBm"
+    id: wifi_signal_db
+    update_interval: 60s
   - platform: copy
-    source_id: wifi_signal_db; name: "WiFi Pct"
+    source_id: wifi_signal_db
+    name: "WiFi Pct"
     filters:
       - lambda: return min(max(2*(x+100.0),0.0),100.0);
-    unit_of_measurement: "%"; accuracy_decimals: 0
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
 
 binary_sensor:
-  - platform: status; name: "Gateway Online"; device_class: connectivity
-  - platform: template; name: "Dining Light On"; id: ct_light_on; device_class: light
-  - platform: template; name: "Dining Fan On"; id: ct_fan_on; device_class: running
-  - platform: template; name: "Bedroom Light On"; id: cw_light_on; device_class: light
-  - platform: template; name: "Bedroom Fan On"; id: cw_fan_on; device_class: running
-  - platform: template; name: "主卧 Light On"; id: zzw_light_on; device_class: light
-  - platform: template; name: "主卧 Fan On"; id: zzw_fan_on; device_class: running
-  - platform: template; name: "客厅 Light On"; id: kkt_light_on; device_class: light
-  - platform: template; name: "客厅 Fan On"; id: kkt_fan_on; device_class: running
+  - platform: status
+    name: "Gateway Online"
+    device_class: connectivity
+  - platform: template
+    name: "Dining Light On"
+    id: ct_light_on
+    device_class: light
+  - platform: template
+    name: "Dining Fan On"
+    id: ct_fan_on
+    device_class: running
+  - platform: template
+    name: "Bedroom Light On"
+    id: cw_light_on
+    device_class: light
+  - platform: template
+    name: "Bedroom Fan On"
+    id: cw_fan_on
+    device_class: running
+  - platform: template
+    name: "主卧 Light On"
+    id: zzw_light_on
+    device_class: light
+  - platform: template
+    name: "主卧 Fan On"
+    id: zzw_fan_on
+    device_class: running
+  - platform: template
+    name: "客厅 Light On"
+    id: kkt_light_on
+    device_class: light
+  - platform: template
+    name: "客厅 Fan On"
+    id: kkt_fan_on
+    device_class: running
 
 text_sensor:
-  - platform: template; name: "Build Time"
-    lambda: 'return {"${build_time}"};'; update_interval: 3600s
-  - platform: version; name: "ESPHome Ver"; hide_timestamp: true
+  - platform: template
+    name: "Build Time"
+    lambda: 'return {"${build_time}"};'
+    update_interval: 3600s
+  - platform: version
+    name: "ESPHome Ver"
+    hide_timestamp: true
   - platform: wifi_info
-    ip_address: { name: "ESP IP" }
-    ssid: { name: "ESP SSID" }
+    ip_address:
+      name: "ESP IP"
+    ssid:
+      name: "ESP SSID"
 
 button:
-  - platform: restart; name: "Restart GW"; icon: mdi:restart; entity_category: diagnostic
+  - platform: restart
+    name: "Restart GW"
+    icon: mdi:restart
+    entity_category: diagnostic
