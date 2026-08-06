@@ -382,7 +382,7 @@ esp32_ble_tracker:
                   break;
                 }
               }
-              // 主卧 (zzw)
+              // 主卧
               uint8_t zzw_mac[6] = {0x92, 0x26, 0x35, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], zzw_mac, 6) == 0) {
@@ -413,7 +413,7 @@ esp32_ble_tracker:
                   break;
                 }
               }
-              // 客厅 (kkt)
+              // 客厅
               uint8_t kkt_mac[6] = {0xCD, 0xAB, 0x38, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], kkt_mac, 6) == 0) {
@@ -448,7 +448,6 @@ esp32_ble_tracker:
 
 # ===================== 开关 =====================
 switch:
-  # 餐厅
   - platform: template
     name: "Dining Light"
     id: ct_light_sw
@@ -486,7 +485,6 @@ switch:
           id(ct_fan_on).publish_state(false);
     lambda: 'return id(ct_fan_on).state;'
 
-  # 次卧
   - platform: template
     name: "Bedroom Light"
     id: cw_light_sw
@@ -524,7 +522,6 @@ switch:
           id(cw_fan_on).publish_state(false);
     lambda: 'return id(cw_fan_on).state;'
 
-  # 主卧
   - platform: template
     name: "主卧 Light"
     id: zzw_light_sw
@@ -562,7 +559,6 @@ switch:
           id(zzw_fan_on).publish_state(false);
     lambda: 'return id(zzw_fan_on).state;'
 
-  # 客厅
   - platform: template
     name: "客厅 Light"
     id: kkt_light_sw
@@ -602,7 +598,6 @@ switch:
 
 # ===================== Number 滑块 =====================
 number:
-  # 餐厅
   - platform: template
     name: "Dining Brightness"
     id: ct_brt_n
@@ -642,7 +637,6 @@ number:
           id(ct_fan_on).publish_state(true);
           id(ct_fan_sw).publish_state(true);
 
-  # 次卧
   - platform: template
     name: "Bedroom Brightness"
     id: cw_brt_n
@@ -682,7 +676,6 @@ number:
           id(cw_fan_on).publish_state(true);
           id(cw_fan_sw).publish_state(true);
 
-  # 主卧
   - platform: template
     name: "主卧 Brightness"
     id: zzw_brt_n
@@ -722,7 +715,6 @@ number:
           id(zzw_fan_on).publish_state(true);
           id(zzw_fan_sw).publish_state(true);
 
-  # 客厅
   - platform: template
     name: "客厅 Brightness"
     id: kkt_brt_n
