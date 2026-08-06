@@ -24,7 +24,6 @@ private:
     static std::vector<uint8_t> bytes_(const std::string &h);
 };
 
-// 🔥 全局指针 + 内联发送函数
 extern BLETx *global_ble_tx;
 inline void ble_tx_send(const std::string &hex) {
     if (global_ble_tx) global_ble_tx->send_hex(hex);
