@@ -161,29 +161,7 @@ interval:
   # 心跳上报 (每60秒)
   - interval: 60s
     then:
-      - lambda: |-
-          tick_heartbeat();
-          // 同步实体状态
-          id(ct_light_sw).publish_state(g_devices[0].light_on);
-          id(ct_fan_sw).publish_state(g_devices[0].fan_on);
-          id(ct_brt).publish_state(g_devices[0].brightness);
-          id(ct_ct).publish_state(g_devices[0].color_temp);
-          id(ct_spd).publish_state(g_devices[0].fan_speed);
-          id(cw_light_sw).publish_state(g_devices[1].light_on);
-          id(cw_fan_sw).publish_state(g_devices[1].fan_on);
-          id(cw_brt).publish_state(g_devices[1].brightness);
-          id(cw_ct).publish_state(g_devices[1].color_temp);
-          id(cw_spd).publish_state(g_devices[1].fan_speed);
-          id(zzw_light_sw).publish_state(g_devices[2].light_on);
-          id(zzw_fan_sw).publish_state(g_devices[2].fan_on);
-          id(zzw_brt).publish_state(g_devices[2].brightness);
-          id(zzw_ct).publish_state(g_devices[2].color_temp);
-          id(zzw_spd).publish_state(g_devices[2].fan_speed);
-          id(kkt_light_sw).publish_state(g_devices[3].light_on);
-          id(kkt_fan_sw).publish_state(g_devices[3].fan_on);
-          id(kkt_brt).publish_state(g_devices[3].brightness);
-          id(kkt_ct).publish_state(g_devices[3].color_temp);
-          id(kkt_spd).publish_state(g_devices[3].fan_speed);
+      - lambda: 'tick_heartbeat();'
 
 # ===================== 开关 =====================
 switch:
