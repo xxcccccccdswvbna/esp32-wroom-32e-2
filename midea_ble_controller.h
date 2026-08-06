@@ -42,7 +42,6 @@ inline std::string midea_make_packet(const std::string &mac,
         return std::string(1, H[b>>4]) + std::string(1, H[b&0xF]);
     };
     
-    // 构建广播包
     std::string s = "0201021BFF114D19" + th(0x10 | (flag & 0x0F)) + mac + "01";
     int idx = flag & 0x0F;
     for(size_t i=1; i<16; i++) {
@@ -52,44 +51,46 @@ inline std::string midea_make_packet(const std::string &mac,
     return s;
 }
 
-// ========== 生成结束包（独立函数） ==========
+// ========== 生成结束包 ==========
 inline std::string midea_end_packet(const std::string &mac, int flag) {
-    // 🔥 结束包固定使用 values = [0x00]
     return midea_make_packet(mac, {0x00}, flag);
 }
 
-// ========== 生成完整命令（控制包 + 结束包） ==========
+// ========== 生成完整命令 ==========
 inline std::string midea_build_cmd(const std::string &mac, 
                                     const std::vector<uint8_t> &values, 
                                     int ctrl_f, int end_f) {
-    std::string ctrl = midea_make_packet(mac, values, ctrl_f);
-    std::string end = midea_end_packet(mac, end_f);
-    return ctrl + "|" + end;
+    return midea_make_packet(mac, values, ctrl_f) + "|" + midea_end_packet(mac, end_f);
 }
 
-// ========== 灯光命令（修复版） ==========
+// ========== 辅助函数 ==========
+inline uint8_t midea_kelvin_to_val(int kelvin) {
+    return std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
+}
 
-// LED 开关
+inline uint8_t midea_pct_to_val(int pct) {
+    return std::round(pct * 255.0 / 100.0);
+}
+
+// ========== 灯光命令 ==========
 inline std::string midea_light_toggle(const std::string &mac) {
     return midea_build_cmd(mac, {0x06}, 2, 4);
 }
 
-// 🔥 亮度：改用组合命令 0x5B，色温设为中间值 0x80（约4300K）
-inline std::string midea_light_brightness(const std::string &mac, int pct) {
-    uint8_t bv = std::round(pct * 255.0 / 100.0);
-    return midea_build_cmd(mac, {0x5B, bv, 0x80}, 2, 4);
+inline std::string midea_light_brightness(const std::string &mac, int pct, int current_ct) {
+    uint8_t bv = midea_pct_to_val(pct);
+    uint8_t tv = midea_kelvin_to_val(current_ct);
+    return midea_build_cmd(mac, {0x5B, bv, tv}, 2, 4);
 }
 
-// 色温：单独使用 0x55 命令
 inline std::string midea_light_color_temp(const std::string &mac, int kelvin) {
-    uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
+    uint8_t tv = midea_kelvin_to_val(kelvin);
     return midea_build_cmd(mac, {0x55, tv}, 7, 12);
 }
 
-// 亮度+色温组合
 inline std::string midea_light_brightness_color(const std::string &mac, int pct, int kelvin) {
-    uint8_t bv = std::round(pct * 255.0 / 100.0);
-    uint8_t tv = std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
+    uint8_t bv = midea_pct_to_val(pct);
+    uint8_t tv = midea_kelvin_to_val(kelvin);
     return midea_build_cmd(mac, {0x5B, bv, tv}, 2, 4);
 }
 
