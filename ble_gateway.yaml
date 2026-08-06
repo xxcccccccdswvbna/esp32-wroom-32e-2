@@ -235,7 +235,7 @@ mqtt:
             }
 
     # ===== 主卧风扇 =====
-    - topic: "zzwfan002"
+    - topic: "zzwfan003"
       then:
         - lambda: |-
             if(x == "on") {
@@ -288,7 +288,7 @@ mqtt:
             }
 
     # ===== 客厅风扇 =====
-    - topic: "kktfan002"
+    - topic: "kktfan003"
       then:
         - lambda: |-
             if(x == "on") {
@@ -455,7 +455,7 @@ esp32_ble_tracker:
                           fixed_speed = s17;
                         }
                       }
-
+wfan002/up
                       if (fixed_speed >= 1 && fixed_speed <= 6) {
                         fan_spd = fixed_speed;
                       } else {
@@ -478,8 +478,8 @@ esp32_ble_tracker:
                     if(light_on) id(bemfa).publish("zzwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("zzwlight002/up","off");
 
-                    if(fan_run) id(bemfa).publish("zzwfan002/up","on#"+std::to_string(fan_spd));
-                    else id(bemfa).publish("zzwfan002/up","off");
+                    if(fan_run) id(bemfa).publish("zzwfan003/up","on#"+std::to_string(fan_spd));
+                    else id(bemfa).publish("zzwfan003/up","off");
 
                     id(zzw_light_on).publish_state(light_on);
                     id(zzw_brt).publish_state(brt);
@@ -593,8 +593,8 @@ esp32_ble_tracker:
                     if(light_on) id(bemfa).publish("kktlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("kktlight002/up","off");
 
-                    if(fan_run) id(bemfa).publish("kktfan002/up","on#"+std::to_string(fan_spd));
-                    else id(bemfa).publish("kktfan002/up","off");
+                    if(fan_run) id(bemfa).publish("kktfan003/up","on#"+std::to_string(fan_spd));
+                    else id(bemfa).publish("kktfan003/up","off");
 
                     id(kkt_light_on).publish_state(light_on);
                     id(kkt_brt).publish_state(brt);
