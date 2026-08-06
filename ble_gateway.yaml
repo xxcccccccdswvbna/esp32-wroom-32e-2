@@ -63,21 +63,13 @@ bluetooth_proxy:
   active: true
   cache_services: true
 
-# ===================== 全局变量 =====================
+# ===================== 全局变量（记忆色温） =====================
 globals:
   - id: ct_current_ct_kelvin
     type: int
     restore_value: no
     initial_value: '4600'
   - id: cw_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
-  - id: zzw_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
-  - id: kkt_current_ct_kelvin
     type: int
     restore_value: no
     initial_value: '4600'
@@ -95,7 +87,6 @@ mqtt:
   birth_message:
   will_message:
   on_message:
-    # ===== 餐厅灯 =====
     - topic: "ctlight002"
       then:
         - lambda: |-
@@ -103,12 +94,12 @@ mqtt:
               int ct = id(ct_current_ct_kelvin);
               int brt = id(ct_brt).state;
               if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("488027700000", brt, ct));
+              id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
               id(ct_brt).publish_state(brt);
               id(ct_ct).publish_state(ct);
             } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("488027700000"));
+              id(tx).send_hex(midea_light_toggle("488027700000"));
               id(ct_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
@@ -118,37 +109,38 @@ mqtt:
               if(pos != std::string::npos) {
                 std::string ct_str = rest.substr(pos + 1);
                 if(!ct_str.empty()) {
-                  int pct = std::stoi(ct_str);
-                  if(pct >= 2700 && pct <= 6500) { ct = pct; id(ct_current_ct_kelvin) = ct; }
+                  int parsed_ct = std::stoi(ct_str);
+                  if(parsed_ct >= 2700 && parsed_ct <= 6500) {
+                    ct = parsed_ct;
+                    id(ct_current_ct_kelvin) = ct;
+                  }
                 }
               }
-              id(tx).send_hex(midea_light_on("488027700000", brt, ct));
+              id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
               id(ct_brt).publish_state(brt);
               id(ct_ct).publish_state(ct);
             }
 
-    # ===== 餐厅风扇 =====
     - topic: "ctfan003"
       then:
         - lambda: |-
             if(x == "on") {
               int spd = id(ct_spd).state;
               if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("488027700000", spd));
+              id(tx).send_hex(midea_fan_speed("488027700000", spd));
               id(ct_fan_on).publish_state(true);
               id(ct_spd).publish_state(spd);
             } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("488027700000"));
+              id(tx).send_hex(midea_fan_toggle("488027700000"));
               id(ct_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("488027700000", s));
+              id(tx).send_hex(midea_fan_speed("488027700000", s));
               id(ct_fan_on).publish_state(true);
               id(ct_spd).publish_state(s);
             }
 
-    # ===== 次卧灯 =====
     - topic: "cwlight002"
       then:
         - lambda: |-
@@ -156,12 +148,12 @@ mqtt:
               int ct = id(cw_current_ct_kelvin);
               int brt = id(cw_brt).state;
               if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));
+              id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
               id(cw_brt).publish_state(brt);
               id(cw_ct).publish_state(ct);
             } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("F0CF2D700000"));
+              id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
               id(cw_light_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               std::string rest = x.substr(3);
@@ -171,143 +163,39 @@ mqtt:
               if(pos != std::string::npos) {
                 std::string ct_str = rest.substr(pos + 1);
                 if(!ct_str.empty()) {
-                  int pct = std::stoi(ct_str);
-                  if(pct >= 2700 && pct <= 6500) { ct = pct; id(cw_current_ct_kelvin) = ct; }
+                  int parsed_ct = std::stoi(ct_str);
+                  if(parsed_ct >= 2700 && parsed_ct <= 6500) {
+                    ct = parsed_ct;
+                    id(cw_current_ct_kelvin) = ct;
+                  }
                 }
               }
-              id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));
+              id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
               id(cw_brt).publish_state(brt);
               id(cw_ct).publish_state(ct);
             }
 
-    # ===== 次卧风扇 =====
     - topic: "cwfan003"
       then:
         - lambda: |-
             if(x == "on") {
               int spd = id(cw_spd).state;
               if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));
+              id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
               id(cw_fan_on).publish_state(true);
               id(cw_spd).publish_state(spd);
             } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("F0CF2D700000"));
+              id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
               id(cw_fan_on).publish_state(false);
             } else if(x.find("on#") == 0) {
               int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("F0CF2D700000", s));
+              id(tx).send_hex(midea_fan_speed("F0CF2D700000", s));
               id(cw_fan_on).publish_state(true);
               id(cw_spd).publish_state(s);
             }
 
-    # ===== 主卧灯 (zzw) =====
-    - topic: "zzwlight002"
-      then:
-        - lambda: |-
-            if(x == "on") {
-              int ct = id(zzw_current_ct_kelvin);
-              int brt = id(zzw_brt).state;
-              if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("922635700000", brt, ct));
-              id(zzw_light_on).publish_state(true);
-              id(zzw_brt).publish_state(brt);
-              id(zzw_ct).publish_state(ct);
-            } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("922635700000"));
-              id(zzw_light_on).publish_state(false);
-            } else if(x.find("on#") == 0) {
-              std::string rest = x.substr(3);
-              size_t pos = rest.find('#');
-              int brt = std::stoi(rest.substr(0, pos));
-              int ct = id(zzw_current_ct_kelvin);
-              if(pos != std::string::npos) {
-                std::string ct_str = rest.substr(pos + 1);
-                if(!ct_str.empty()) {
-                  int pct = std::stoi(ct_str);
-                  if(pct >= 2700 && pct <= 6500) { ct = pct; id(zzw_current_ct_kelvin) = ct; }
-                }
-              }
-              id(tx).send_hex(midea_light_on("922635700000", brt, ct));
-              id(zzw_light_on).publish_state(true);
-              id(zzw_brt).publish_state(brt);
-              id(zzw_ct).publish_state(ct);
-            }
-
-    # ===== 主卧风扇 =====
-    - topic: "zzwfan002"
-      then:
-        - lambda: |-
-            if(x == "on") {
-              int spd = id(zzw_spd).state;
-              if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("922635700000", spd));
-              id(zzw_fan_on).publish_state(true);
-              id(zzw_spd).publish_state(spd);
-            } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("922635700000"));
-              id(zzw_fan_on).publish_state(false);
-            } else if(x.find("on#") == 0) {
-              int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("922635700000", s));
-              id(zzw_fan_on).publish_state(true);
-              id(zzw_spd).publish_state(s);
-            }
-
-    # ===== 客厅灯 (kkt) =====
-    - topic: "kktlight002"
-      then:
-        - lambda: |-
-            if(x == "on") {
-              int ct = id(kkt_current_ct_kelvin);
-              int brt = id(kkt_brt).state;
-              if(brt < 1) brt = 50;
-              id(tx).send_hex(midea_light_on("CDAB38700000", brt, ct));
-              id(kkt_light_on).publish_state(true);
-              id(kkt_brt).publish_state(brt);
-              id(kkt_ct).publish_state(ct);
-            } else if(x == "off") {
-              id(tx).send_hex(midea_light_off("CDAB38700000"));
-              id(kkt_light_on).publish_state(false);
-            } else if(x.find("on#") == 0) {
-              std::string rest = x.substr(3);
-              size_t pos = rest.find('#');
-              int brt = std::stoi(rest.substr(0, pos));
-              int ct = id(kkt_current_ct_kelvin);
-              if(pos != std::string::npos) {
-                std::string ct_str = rest.substr(pos + 1);
-                if(!ct_str.empty()) {
-                  int pct = std::stoi(ct_str);
-                  if(pct >= 2700 && pct <= 6500) { ct = pct; id(kkt_current_ct_kelvin) = ct; }
-                }
-              }
-              id(tx).send_hex(midea_light_on("CDAB38700000", brt, ct));
-              id(kkt_light_on).publish_state(true);
-              id(kkt_brt).publish_state(brt);
-              id(kkt_ct).publish_state(ct);
-            }
-
-    # ===== 客厅风扇 =====
-    - topic: "kktfan002"
-      then:
-        - lambda: |-
-            if(x == "on") {
-              int spd = id(kkt_spd).state;
-              if(spd < 1) spd = 1;
-              id(tx).send_hex(midea_fan_on("CDAB38700000", spd));
-              id(kkt_fan_on).publish_state(true);
-              id(kkt_spd).publish_state(spd);
-            } else if(x == "off") {
-              id(tx).send_hex(midea_fan_off("CDAB38700000"));
-              id(kkt_fan_on).publish_state(false);
-            } else if(x.find("on#") == 0) {
-              int s = std::stoi(x.substr(3));
-              id(tx).send_hex(midea_fan_on("CDAB38700000", s));
-              id(kkt_fan_on).publish_state(true);
-              id(kkt_spd).publish_state(s);
-            }
-
-# ===================== BLE 扫描 =====================
+# ===================== BLE 扫描与状态上报 =====================
 esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
@@ -320,7 +208,7 @@ esp32_ble_tracker:
             for (auto &data : datas) {
               auto &raw = data.data;
               if (raw.size() < 20) continue;
-              // 餐厅
+
               uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], ct_mac, 6) == 0) {
@@ -330,6 +218,7 @@ esp32_ble_tracker:
                   uint8_t fs = raw[i+16];
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -342,16 +231,21 @@ esp32_ble_tracker:
                     else id(bemfa).publish("ctlight002/up","off");
                     if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("ctfan003/up","off");
-                    id(ct_light_on).publish_state(light_on); id(ct_brt).publish_state(brt);
-                    id(ct_ct).publish_state(ct_k); id(ct_fan_on).publish_state(fan_run);
-                    id(ct_spd).publish_state(fan_spd); id(ct_light_sw).publish_state(light_on);
-                    id(ct_fan_sw).publish_state(fan_run); id(ct_brt_n).publish_state(brt);
-                    id(ct_ct_n).publish_state(ct_k); id(ct_spd_n).publish_state(fan_spd);
+                    id(ct_light_on).publish_state(light_on);
+                    id(ct_brt).publish_state(brt);
+                    id(ct_ct).publish_state(ct_k);
+                    id(ct_fan_on).publish_state(fan_run);
+                    id(ct_spd).publish_state(fan_spd);
+                    id(ct_light_sw).publish_state(light_on);
+                    id(ct_fan_sw).publish_state(fan_run);
+                    id(ct_brt_n).publish_state(brt);
+                    id(ct_ct_n).publish_state(ct_k);
+                    id(ct_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
               }
-              // 次卧
+
               uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], cw_mac, 6) == 0) {
@@ -361,6 +255,7 @@ esp32_ble_tracker:
                   uint8_t fs = raw[i+16];
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -373,73 +268,16 @@ esp32_ble_tracker:
                     else id(bemfa).publish("cwlight002/up","off");
                     if(fan_run) id(bemfa).publish("cwfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("cwfan003/up","off");
-                    id(cw_light_on).publish_state(light_on); id(cw_brt).publish_state(brt);
-                    id(cw_ct).publish_state(ct_k); id(cw_fan_on).publish_state(fan_run);
-                    id(cw_spd).publish_state(fan_spd); id(cw_light_sw).publish_state(light_on);
-                    id(cw_fan_sw).publish_state(fan_run); id(cw_brt_n).publish_state(brt);
-                    id(cw_ct_n).publish_state(ct_k); id(cw_spd_n).publish_state(fan_spd);
-                  }
-                  break;
-                }
-              }
-              // 主卧
-              uint8_t zzw_mac[6] = {0x92, 0x26, 0x35, 0x70, 0x00, 0x00};
-              for (int i = 2; i <= (int)raw.size() - 6; i++) {
-                if (memcmp(&raw[i], zzw_mac, 6) == 0) {
-                  bool light_on = (raw[i+7] == 0x01);
-                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                  uint8_t fs = raw[i+16];
-                  bool fan_run = (fs & 0x01) != 0;
-                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
-                  static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
-                  static uint32_t lr=0, lch=0; static uint8_t rc=0;
-                  bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
-                  if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
-                  bool hb=(millis()-lr>60000);
-                  bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
-                  if(ch||hb||rt){
-                    if(rt)rc++;else rc=0; lr=millis();
-                    if(light_on) id(bemfa).publish("zzwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
-                    else id(bemfa).publish("zzwlight002/up","off");
-                    if(fan_run) id(bemfa).publish("zzwfan002/up","on#"+std::to_string(fan_spd));
-                    else id(bemfa).publish("zzwfan002/up","off");
-                    id(zzw_light_on).publish_state(light_on); id(zzw_brt).publish_state(brt);
-                    id(zzw_ct).publish_state(ct_k); id(zzw_fan_on).publish_state(fan_run);
-                    id(zzw_spd).publish_state(fan_spd); id(zzw_light_sw).publish_state(light_on);
-                    id(zzw_fan_sw).publish_state(fan_run); id(zzw_brt_n).publish_state(brt);
-                    id(zzw_ct_n).publish_state(ct_k); id(zzw_spd_n).publish_state(fan_spd);
-                  }
-                  break;
-                }
-              }
-              // 客厅
-              uint8_t kkt_mac[6] = {0xCD, 0xAB, 0x38, 0x70, 0x00, 0x00};
-              for (int i = 2; i <= (int)raw.size() - 6; i++) {
-                if (memcmp(&raw[i], kkt_mac, 6) == 0) {
-                  bool light_on = (raw[i+7] == 0x01);
-                  int brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                  int ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                  uint8_t fs = raw[i+16];
-                  bool fan_run = (fs & 0x01) != 0;
-                  int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
-                  static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
-                  static uint32_t lr=0, lch=0; static uint8_t rc=0;
-                  bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
-                  if(ch){lch=millis();rc=0;ll=light_on;lb=brt;lc=ct_k;lfr=fan_run;lfs=fan_spd;}
-                  bool hb=(millis()-lr>60000);
-                  bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
-                  if(ch||hb||rt){
-                    if(rt)rc++;else rc=0; lr=millis();
-                    if(light_on) id(bemfa).publish("kktlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
-                    else id(bemfa).publish("kktlight002/up","off");
-                    if(fan_run) id(bemfa).publish("kktfan002/up","on#"+std::to_string(fan_spd));
-                    else id(bemfa).publish("kktfan002/up","off");
-                    id(kkt_light_on).publish_state(light_on); id(kkt_brt).publish_state(brt);
-                    id(kkt_ct).publish_state(ct_k); id(kkt_fan_on).publish_state(fan_run);
-                    id(kkt_spd).publish_state(fan_spd); id(kkt_light_sw).publish_state(light_on);
-                    id(kkt_fan_sw).publish_state(fan_run); id(kkt_brt_n).publish_state(brt);
-                    id(kkt_ct_n).publish_state(ct_k); id(kkt_spd_n).publish_state(fan_spd);
+                    id(cw_light_on).publish_state(light_on);
+                    id(cw_brt).publish_state(brt);
+                    id(cw_ct).publish_state(ct_k);
+                    id(cw_fan_on).publish_state(fan_run);
+                    id(cw_spd).publish_state(fan_spd);
+                    id(cw_light_sw).publish_state(light_on);
+                    id(cw_fan_sw).publish_state(fan_run);
+                    id(cw_brt_n).publish_state(brt);
+                    id(cw_ct_n).publish_state(ct_k);
+                    id(cw_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
@@ -459,11 +297,13 @@ switch:
           int ct = id(ct_current_ct_kelvin);
           int brt = id(ct_brt).state;
           if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("488027700000", brt, ct));
+          id(tx).send_hex(midea_light_brightness_color("488027700000", brt, ct));
           id(ct_light_on).publish_state(true);
+          id(ct_brt).publish_state(brt);
+          id(ct_ct).publish_state(ct);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_light_off("488027700000"));
+          id(tx).send_hex(midea_light_toggle("488027700000"));
           id(ct_light_on).publish_state(false);
     lambda: 'return id(ct_light_on).state;'
 
@@ -477,11 +317,12 @@ switch:
       - lambda: |-
           int spd = id(ct_spd).state;
           if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("488027700000", spd));
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
           id(ct_fan_on).publish_state(true);
+          id(ct_spd).publish_state(spd);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_fan_off("488027700000"));
+          id(tx).send_hex(midea_fan_toggle("488027700000"));
           id(ct_fan_on).publish_state(false);
     lambda: 'return id(ct_fan_on).state;'
 
@@ -496,11 +337,13 @@ switch:
           int ct = id(cw_current_ct_kelvin);
           int brt = id(cw_brt).state;
           if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));
+          id(tx).send_hex(midea_light_brightness_color("F0CF2D700000", brt, ct));
           id(cw_light_on).publish_state(true);
+          id(cw_brt).publish_state(brt);
+          id(cw_ct).publish_state(ct);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_light_off("F0CF2D700000"));
+          id(tx).send_hex(midea_light_toggle("F0CF2D700000"));
           id(cw_light_on).publish_state(false);
     lambda: 'return id(cw_light_on).state;'
 
@@ -514,87 +357,14 @@ switch:
       - lambda: |-
           int spd = id(cw_spd).state;
           if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
           id(cw_fan_on).publish_state(true);
+          id(cw_spd).publish_state(spd);
     turn_off_action:
       - lambda: |-
-          id(tx).send_hex(midea_fan_off("F0CF2D700000"));
+          id(tx).send_hex(midea_fan_toggle("F0CF2D700000"));
           id(cw_fan_on).publish_state(false);
     lambda: 'return id(cw_fan_on).state;'
-
-  - platform: template
-    name: "Master Light"
-    id: zzw_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int ct = id(zzw_current_ct_kelvin);
-          int brt = id(zzw_brt).state;
-          if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("922635700000", brt, ct));
-          id(zzw_light_on).publish_state(true);
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_light_off("922635700000"));
-          id(zzw_light_on).publish_state(false);
-    lambda: 'return id(zzw_light_on).state;'
-
-  - platform: template
-    name: "Master Fan"
-    id: zzw_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int spd = id(zzw_spd).state;
-          if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("922635700000", spd));
-          id(zzw_fan_on).publish_state(true);
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_fan_off("922635700000"));
-          id(zzw_fan_on).publish_state(false);
-    lambda: 'return id(zzw_fan_on).state;'
-
-  - platform: template
-    name: "Living Room Light"
-    id: kkt_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int ct = id(kkt_current_ct_kelvin);
-          int brt = id(kkt_brt).state;
-          if(brt < 1) brt = 50;
-          id(tx).send_hex(midea_light_on("CDAB38700000", brt, ct));
-          id(kkt_light_on).publish_state(true);
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_light_off("CDAB38700000"));
-          id(kkt_light_on).publish_state(false);
-    lambda: 'return id(kkt_light_on).state;'
-
-  - platform: template
-    name: "Living Room Fan"
-    id: kkt_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          int spd = id(kkt_spd).state;
-          if(spd < 1) spd = 1;
-          id(tx).send_hex(midea_fan_on("CDAB38700000", spd));
-          id(kkt_fan_on).publish_state(true);
-    turn_off_action:
-      - lambda: |-
-          id(tx).send_hex(midea_fan_off("CDAB38700000"));
-          id(kkt_fan_on).publish_state(false);
-    lambda: 'return id(kkt_fan_on).state;'
 
 # ===================== Number 滑块 =====================
 number:
@@ -614,6 +384,7 @@ number:
           id(ct_brt).publish_state(brt);
           id(ct_light_on).publish_state(true);
           id(ct_light_sw).publish_state(true);
+
   - platform: template
     name: "Dining ColorTemp"
     id: ct_ct_n
@@ -628,6 +399,7 @@ number:
           id(ct_current_ct_kelvin) = kelvin;
           id(tx).send_hex(midea_light_color_temp("488027700000", kelvin));
           id(ct_ct).publish_state(kelvin);
+
   - platform: template
     name: "Dining Fan Speed"
     id: ct_spd_n
@@ -638,7 +410,7 @@ number:
     set_action:
       - lambda: |-
           int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("488027700000", spd));
+          id(tx).send_hex(midea_fan_speed("488027700000", spd));
           id(ct_spd).publish_state(spd);
           id(ct_fan_on).publish_state(true);
           id(ct_fan_sw).publish_state(true);
@@ -659,6 +431,7 @@ number:
           id(cw_brt).publish_state(brt);
           id(cw_light_on).publish_state(true);
           id(cw_light_sw).publish_state(true);
+
   - platform: template
     name: "Bedroom ColorTemp"
     id: cw_ct_n
@@ -673,6 +446,7 @@ number:
           id(cw_current_ct_kelvin) = kelvin;
           id(tx).send_hex(midea_light_color_temp("F0CF2D700000", kelvin));
           id(cw_ct).publish_state(kelvin);
+
   - platform: template
     name: "Bedroom Fan Speed"
     id: cw_spd_n
@@ -683,100 +457,10 @@ number:
     set_action:
       - lambda: |-
           int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));
+          id(tx).send_hex(midea_fan_speed("F0CF2D700000", spd));
           id(cw_spd).publish_state(spd);
           id(cw_fan_on).publish_state(true);
           id(cw_fan_sw).publish_state(true);
-
-  - platform: template
-    name: "Master Brightness"
-    id: zzw_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          int brt = (int)x;
-          int ct = id(zzw_current_ct_kelvin);
-          id(tx).send_hex(midea_light_brightness("922635700000", brt, ct));
-          id(zzw_brt).publish_state(brt);
-          id(zzw_light_on).publish_state(true);
-          id(zzw_light_sw).publish_state(true);
-  - platform: template
-    name: "Master ColorTemp"
-    id: zzw_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          int kelvin = (int)x;
-          id(zzw_current_ct_kelvin) = kelvin;
-          id(tx).send_hex(midea_light_color_temp("922635700000", kelvin));
-          id(zzw_ct).publish_state(kelvin);
-  - platform: template
-    name: "Master Fan Speed"
-    id: zzw_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("922635700000", spd));
-          id(zzw_spd).publish_state(spd);
-          id(zzw_fan_on).publish_state(true);
-          id(zzw_fan_sw).publish_state(true);
-
-  - platform: template
-    name: "Living Room Brightness"
-    id: kkt_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          int brt = (int)x;
-          int ct = id(kkt_current_ct_kelvin);
-          id(tx).send_hex(midea_light_brightness("CDAB38700000", brt, ct));
-          id(kkt_brt).publish_state(brt);
-          id(kkt_light_on).publish_state(true);
-          id(kkt_light_sw).publish_state(true);
-  - platform: template
-    name: "Living Room ColorTemp"
-    id: kkt_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          int kelvin = (int)x;
-          id(kkt_current_ct_kelvin) = kelvin;
-          id(tx).send_hex(midea_light_color_temp("CDAB38700000", kelvin));
-          id(kkt_ct).publish_state(kelvin);
-  - platform: template
-    name: "Living Room Fan Speed"
-    id: kkt_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          int spd = (int)x;
-          id(tx).send_hex(midea_fan_on("CDAB38700000", spd));
-          id(kkt_spd).publish_state(spd);
-          id(kkt_fan_on).publish_state(true);
-          id(kkt_fan_sw).publish_state(true);
 
 # ===================== 传感器 =====================
 sensor:
@@ -804,30 +488,6 @@ sensor:
   - platform: template
     name: "Bedroom Spd"
     id: cw_spd
-  - platform: template
-    name: "Master Brt"
-    id: zzw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Master CT"
-    id: zzw_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Master Spd"
-    id: zzw_spd
-  - platform: template
-    name: "Living Room Brt"
-    id: kkt_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Living Room CT"
-    id: kkt_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Living Room Spd"
-    id: kkt_spd
   - platform: uptime
     name: "Uptime"
     update_interval: 60s
@@ -867,22 +527,6 @@ binary_sensor:
   - platform: template
     name: "Bedroom Fan On"
     id: cw_fan_on
-    device_class: running
-  - platform: template
-    name: "Master Light On"
-    id: zzw_light_on
-    device_class: light
-  - platform: template
-    name: "Master Fan On"
-    id: zzw_fan_on
-    device_class: running
-  - platform: template
-    name: "Living Room Light On"
-    id: kkt_light_on
-    device_class: light
-  - platform: template
-    name: "Living Room Fan On"
-    id: kkt_fan_on
     device_class: running
 
 text_sensor:
