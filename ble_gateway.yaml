@@ -1,4 +1,4 @@
-# Auto-generated - syntax verified
+# ===================== 项目配置 =====================
 substitutions:
   project_name: "byy1"
   build_time: "Unknown"
@@ -6,6 +6,7 @@ substitutions:
 esphome:
   name: ble-2
   friendly_name: "${project_name}"
+  comment: "${project_name} - Build: ${build_time}"
   includes:
     - midea_ble_controller.h
 
@@ -87,31 +88,91 @@ mqtt:
     - topic: "ctlight002"
       then:
         - lambda: |-
-            if(x=="on"){ int ct=id(dining_ct_kelvin),brt=id(dining_brt).state; if(brt<1)brt=50; id(tx).send_hex(midea_light_on("488027700000",brt,ct)); id(dining_light_on).publish_state(true); }
-            else if(x=="off"){ id(tx).send_hex(midea_light_off("488027700000")); id(dining_light_on).publish_state(false); }
-            else if(x.find("on#")==0){ auto r=x.substr(3); auto p=r.find('#'); int brt=std::stoi(r.substr(0,p)),ct=id(dining_ct_kelvin);
-              if(p!=std::string::npos){ auto s=r.substr(p+1); if(!s.empty()){ int pc=std::stoi(s); if(pc>=2700&&pc<=6500){ct=pc;id(dining_ct_kelvin)=ct;}}}
-              id(tx).send_hex(midea_light_on("488027700000",brt,ct)); id(dining_light_on).publish_state(true); }
+            if(x=="on"){
+              int ct=id(dining_ct_kelvin),brt=id(dining_brt).state;
+              if(brt<1)brt=50;
+              id(tx).send_hex(midea_light_on("488027700000",brt,ct));
+              id(dining_light_on).publish_state(true);
+            }else if(x=="off"){
+              id(tx).send_hex(midea_light_off("488027700000"));
+              id(dining_light_on).publish_state(false);
+            }else if(x.find("on#")==0){
+              auto r=x.substr(3);
+              auto p=r.find('#');
+              int brt=std::stoi(r.substr(0,p)),ct=id(dining_ct_kelvin);
+              if(p!=std::string::npos){
+                auto s=r.substr(p+1);
+                if(!s.empty()){
+                  int pc=std::stoi(s);
+                  if(pc>=2700&&pc<=6500){
+                    ct=pc;
+                    id(dining_ct_kelvin)=ct;
+                  }
+                }
+              }
+              id(tx).send_hex(midea_light_on("488027700000",brt,ct));
+              id(dining_light_on).publish_state(true);
+            }
     - topic: "ctfan003"
       then:
         - lambda: |-
-            if(x=="on"){ int spd=id(dining_spd).state; if(spd<1)spd=1; id(tx).send_hex(midea_fan_on("488027700000",spd)); id(dining_fan_on).publish_state(true); }
-            else if(x=="off"){ id(tx).send_hex(midea_fan_off("488027700000")); id(dining_fan_on).publish_state(false); }
-            else if(x.find("on#")==0){ int s=std::stoi(x.substr(3)); id(tx).send_hex(midea_fan_on("488027700000",s)); id(dining_fan_on).publish_state(true); }
+            if(x=="on"){
+              int spd=id(dining_spd).state;
+              if(spd<1)spd=1;
+              id(tx).send_hex(midea_fan_on("488027700000",spd));
+              id(dining_fan_on).publish_state(true);
+            }else if(x=="off"){
+              id(tx).send_hex(midea_fan_off("488027700000"));
+              id(dining_fan_on).publish_state(false);
+            }else if(x.find("on#")==0){
+              int s=std::stoi(x.substr(3));
+              id(tx).send_hex(midea_fan_on("488027700000",s));
+              id(dining_fan_on).publish_state(true);
+            }
     - topic: "cwlight002"
       then:
         - lambda: |-
-            if(x=="on"){ int ct=id(bedroom_ct_kelvin),brt=id(bedroom_brt).state; if(brt<1)brt=50; id(tx).send_hex(midea_light_on("F0CF2D700000",brt,ct)); id(bedroom_light_on).publish_state(true); }
-            else if(x=="off"){ id(tx).send_hex(midea_light_off("F0CF2D700000")); id(bedroom_light_on).publish_state(false); }
-            else if(x.find("on#")==0){ auto r=x.substr(3); auto p=r.find('#'); int brt=std::stoi(r.substr(0,p)),ct=id(bedroom_ct_kelvin);
-              if(p!=std::string::npos){ auto s=r.substr(p+1); if(!s.empty()){ int pc=std::stoi(s); if(pc>=2700&&pc<=6500){ct=pc;id(bedroom_ct_kelvin)=ct;}}}
-              id(tx).send_hex(midea_light_on("F0CF2D700000",brt,ct)); id(bedroom_light_on).publish_state(true); }
+            if(x=="on"){
+              int ct=id(bedroom_ct_kelvin),brt=id(bedroom_brt).state;
+              if(brt<1)brt=50;
+              id(tx).send_hex(midea_light_on("F0CF2D700000",brt,ct));
+              id(bedroom_light_on).publish_state(true);
+            }else if(x=="off"){
+              id(tx).send_hex(midea_light_off("F0CF2D700000"));
+              id(bedroom_light_on).publish_state(false);
+            }else if(x.find("on#")==0){
+              auto r=x.substr(3);
+              auto p=r.find('#');
+              int brt=std::stoi(r.substr(0,p)),ct=id(bedroom_ct_kelvin);
+              if(p!=std::string::npos){
+                auto s=r.substr(p+1);
+                if(!s.empty()){
+                  int pc=std::stoi(s);
+                  if(pc>=2700&&pc<=6500){
+                    ct=pc;
+                    id(bedroom_ct_kelvin)=ct;
+                  }
+                }
+              }
+              id(tx).send_hex(midea_light_on("F0CF2D700000",brt,ct));
+              id(bedroom_light_on).publish_state(true);
+            }
     - topic: "cwfan003"
       then:
         - lambda: |-
-            if(x=="on"){ int spd=id(bedroom_spd).state; if(spd<1)spd=1; id(tx).send_hex(midea_fan_on("F0CF2D700000",spd)); id(bedroom_fan_on).publish_state(true); }
-            else if(x=="off"){ id(tx).send_hex(midea_fan_off("F0CF2D700000")); id(bedroom_fan_on).publish_state(false); }
-            else if(x.find("on#")==0){ int s=std::stoi(x.substr(3)); id(tx).send_hex(midea_fan_on("F0CF2D700000",s)); id(bedroom_fan_on).publish_state(true); }
+            if(x=="on"){
+              int spd=id(bedroom_spd).state;
+              if(spd<1)spd=1;
+              id(tx).send_hex(midea_fan_on("F0CF2D700000",spd));
+              id(bedroom_fan_on).publish_state(true);
+            }else if(x=="off"){
+              id(tx).send_hex(midea_fan_off("F0CF2D700000"));
+              id(bedroom_fan_on).publish_state(false);
+            }else if(x.find("on#")==0){
+              int s=std::stoi(x.substr(3));
+              id(tx).send_hex(midea_fan_on("F0CF2D700000",s));
+              id(bedroom_fan_on).publish_state(true);
+            }
 
 esp32_ble_tracker:
   scan_parameters:
@@ -122,49 +183,93 @@ esp32_ble_tracker:
     - then:
         - lambda: |-
             auto datas=x.get_manufacturer_datas();
-            for(auto&data:datas){auto&raw=data.data; if(raw.size()<20)continue;
-              uint8_t dining_mac[6]={0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
-              for(int i=2;i<=(int)raw.size()-6;i++){ if(memcmp(&raw[i],dining_mac,6)==0){
-                bool lo=(raw[i+7]==0x01); int br=(int)(raw[i+12]/255.0f*100.0f);
-                int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
-                uint8_t fs=raw[i+16]; bool fr=(fs&0x01)!=0; int sp=fr?(raw[i+17]+1):0;
-                static bool dining_ll=false,dining_lfr=false; static int dining_lb=-1,dining_lc=-1,dining_lfs=-1;
-                static uint32_t dining_lr=0,dining_lch=0; static uint8_t dining_rc=0;
-                bool ch=(lo!=dining_ll)||(br!=dining_lb)||(ct!=dining_lc)||(fr!=dining_lfr)||(sp!=dining_lfs);
-                if(ch){dining_lch=millis();dining_rc=0;dining_ll=lo;dining_lb=br;dining_lc=ct;dining_lfr=fr;dining_lfs=sp;}
-                bool hb=(millis()-dining_lr>60000),rt=(millis()-dining_lch<10000)&&(dining_rc<3)&&(millis()-dining_lr>3000);
-                if(ch||hb||rt){ if(rt)dining_rc++;else dining_rc=0; dining_lr=millis();
-                  if(lo)id(bemfa).publish("ctlight002/up","on#"+std::to_string(br)+"#"+std::to_string(ct));
-                  else id(bemfa).publish("ctlight002/up","off");
-                  if(fr)id(bemfa).publish("ctfan003/up","on#"+std::to_string(sp));
-                  else id(bemfa).publish("ctfan003/up","off");
-                  id(dining_light_on).publish_state(lo); id(dining_brt).publish_state(br);
-                  id(dining_ct).publish_state(ct); id(dining_fan_on).publish_state(fr);
-                  id(dining_spd).publish_state(sp);
+            for(auto&data:datas){
+              auto&raw=data.data;
+              if(raw.size()<20)continue;
+              uint8_t dining_mac[6]={0x48,0x80,0x27,0x70,0x00,0x00};
+              for(int i=2;i<=(int)raw.size()-6;i++){
+                if(memcmp(&raw[i],dining_mac,6)==0){
+                  bool lo=(raw[i+7]==0x01);
+                  int br=(int)(raw[i+12]/255.0f*100.0f);
+                  int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
+                  uint8_t fs=raw[i+16];
+                  bool fr=(fs&0x01)!=0;
+                  int sp=fr?(raw[i+17]+1):0;
+                  static bool dining_ll=false,dining_lfr=false;
+                  static int dining_lb=-1,dining_lc=-1,dining_lfs=-1;
+                  static uint32_t dining_lr=0,dining_lch=0;
+                  static uint8_t dining_rc=0;
+                  bool ch=(lo!=dining_ll)||(br!=dining_lb)||(ct!=dining_lc)||(fr!=dining_lfr)||(sp!=dining_lfs);
+                  if(ch){
+                    dining_lch=millis();
+                    dining_rc=0;
+                    dining_ll=lo;
+                    dining_lb=br;
+                    dining_lc=ct;
+                    dining_lfr=fr;
+                    dining_lfs=sp;
+                  }
+                  bool hb=(millis()-dining_lr>60000);
+                  bool rt=(millis()-dining_lch<10000)&&(dining_rc<3)&&(millis()-dining_lr>3000);
+                  if(ch||hb||rt){
+                    if(rt)dining_rc++;
+                    else dining_rc=0;
+                    dining_lr=millis();
+                    if(lo)id(bemfa).publish("ctlight002/up","on#"+std::to_string(br)+"#"+std::to_string(ct));
+                    else id(bemfa).publish("ctlight002/up","off");
+                    if(fr)id(bemfa).publish("ctfan003/up","on#"+std::to_string(sp));
+                    else id(bemfa).publish("ctfan003/up","off");
+                    id(dining_light_on).publish_state(lo);
+                    id(dining_brt).publish_state(br);
+                    id(dining_ct).publish_state(ct);
+                    id(dining_fan_on).publish_state(fr);
+                    id(dining_spd).publish_state(sp);
+                  }
+                  break;
                 }
-                break;
-              }}
-              uint8_t bedroom_mac[6]={0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
-              for(int i=2;i<=(int)raw.size()-6;i++){ if(memcmp(&raw[i],bedroom_mac,6)==0){
-                bool lo=(raw[i+7]==0x01); int br=(int)(raw[i+12]/255.0f*100.0f);
-                int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
-                uint8_t fs=raw[i+16]; bool fr=(fs&0x01)!=0; int sp=fr?(raw[i+17]+1):0;
-                static bool bedroom_ll=false,bedroom_lfr=false; static int bedroom_lb=-1,bedroom_lc=-1,bedroom_lfs=-1;
-                static uint32_t bedroom_lr=0,bedroom_lch=0; static uint8_t bedroom_rc=0;
-                bool ch=(lo!=bedroom_ll)||(br!=bedroom_lb)||(ct!=bedroom_lc)||(fr!=bedroom_lfr)||(sp!=bedroom_lfs);
-                if(ch){bedroom_lch=millis();bedroom_rc=0;bedroom_ll=lo;bedroom_lb=br;bedroom_lc=ct;bedroom_lfr=fr;bedroom_lfs=sp;}
-                bool hb=(millis()-bedroom_lr>60000),rt=(millis()-bedroom_lch<10000)&&(bedroom_rc<3)&&(millis()-bedroom_lr>3000);
-                if(ch||hb||rt){ if(rt)bedroom_rc++;else bedroom_rc=0; bedroom_lr=millis();
-                  if(lo)id(bemfa).publish("cwlight002/up","on#"+std::to_string(br)+"#"+std::to_string(ct));
-                  else id(bemfa).publish("cwlight002/up","off");
-                  if(fr)id(bemfa).publish("cwfan003/up","on#"+std::to_string(sp));
-                  else id(bemfa).publish("cwfan003/up","off");
-                  id(bedroom_light_on).publish_state(lo); id(bedroom_brt).publish_state(br);
-                  id(bedroom_ct).publish_state(ct); id(bedroom_fan_on).publish_state(fr);
-                  id(bedroom_spd).publish_state(sp);
+              }
+              uint8_t bedroom_mac[6]={0xF0,0xCF,0x2D,0x70,0x00,0x00};
+              for(int i=2;i<=(int)raw.size()-6;i++){
+                if(memcmp(&raw[i],bedroom_mac,6)==0){
+                  bool lo=(raw[i+7]==0x01);
+                  int br=(int)(raw[i+12]/255.0f*100.0f);
+                  int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
+                  uint8_t fs=raw[i+16];
+                  bool fr=(fs&0x01)!=0;
+                  int sp=fr?(raw[i+17]+1):0;
+                  static bool bedroom_ll=false,bedroom_lfr=false;
+                  static int bedroom_lb=-1,bedroom_lc=-1,bedroom_lfs=-1;
+                  static uint32_t bedroom_lr=0,bedroom_lch=0;
+                  static uint8_t bedroom_rc=0;
+                  bool ch=(lo!=bedroom_ll)||(br!=bedroom_lb)||(ct!=bedroom_lc)||(fr!=bedroom_lfr)||(sp!=bedroom_lfs);
+                  if(ch){
+                    bedroom_lch=millis();
+                    bedroom_rc=0;
+                    bedroom_ll=lo;
+                    bedroom_lb=br;
+                    bedroom_lc=ct;
+                    bedroom_lfr=fr;
+                    bedroom_lfs=sp;
+                  }
+                  bool hb=(millis()-bedroom_lr>60000);
+                  bool rt=(millis()-bedroom_lch<10000)&&(bedroom_rc<3)&&(millis()-bedroom_lr>3000);
+                  if(ch||hb||rt){
+                    if(rt)bedroom_rc++;
+                    else bedroom_rc=0;
+                    bedroom_lr=millis();
+                    if(lo)id(bemfa).publish("cwlight002/up","on#"+std::to_string(br)+"#"+std::to_string(ct));
+                    else id(bemfa).publish("cwlight002/up","off");
+                    if(fr)id(bemfa).publish("cwfan003/up","on#"+std::to_string(sp));
+                    else id(bemfa).publish("cwfan003/up","off");
+                    id(bedroom_light_on).publish_state(lo);
+                    id(bedroom_brt).publish_state(br);
+                    id(bedroom_ct).publish_state(ct);
+                    id(bedroom_fan_on).publish_state(fr);
+                    id(bedroom_spd).publish_state(sp);
+                  }
+                  break;
                 }
-                break;
-              }}
+              }
             }
 
 light:
@@ -217,20 +322,20 @@ sensor:
     name: "Bedroom Spd"
     id: bedroom_spd
   - platform: uptime
-    name: Uptime
+    name: "Uptime"
     update_interval: 60s
   - platform: internal_temperature
-    name: ESP32 Temp
+    name: "ESP32 Temp"
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     update_interval: 60s
   - platform: wifi_signal
-    name: WiFi dBm
+    name: "WiFi dBm"
     id: wifi_signal_db
     update_interval: 60s
   - platform: copy
     source_id: wifi_signal_db
-    name: WiFi Pct
+    name: "WiFi Pct"
     filters:
       - lambda: return min(max(2*(x+100.0),0.0),100.0);
     unit_of_measurement: "%"
@@ -254,25 +359,25 @@ binary_sensor:
     id: bedroom_fan_on
     device_class: running
   - platform: status
-    name: Gateway Online
+    name: "Gateway Online"
     device_class: connectivity
 
 text_sensor:
   - platform: template
-    name: Build Time
+    name: "Build Time"
     lambda: 'return {"${build_time}"};'
     update_interval: 3600s
   - platform: version
-    name: ESPHome Ver
+    name: "ESPHome Ver"
     hide_timestamp: true
   - platform: wifi_info
     ip_address:
-      name: ESP IP
+      name: "ESP IP"
     ssid:
-      name: ESP SSID
+      name: "ESP SSID"
 
 button:
   - platform: restart
-    name: Restart GW
+    name: "Restart GW"
     icon: mdi:restart
     entity_category: diagnostic
