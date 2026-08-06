@@ -8,7 +8,7 @@ inline std::vector<uint8_t> midea_encode_table(const std::string &mac) {
     for(int i=0; i<6; i++) hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
     std::vector<uint8_t> tb(16);
     int l=0, r=1;
-    for(int i=0; i<15; i++) { tb[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6) { l++; r=l+1; } }
+    for(int i=0; i<15; i++) { tb[i] = (hx[l] + hx[r]) & 0xFF; r++; if(r==6){ l++; r=l+1; } }
     tb[15] = 0; for(int i=0; i<6; i++) tb[15] = (tb[15] + hx[i]) & 0xFF;
     return tb;
 }
