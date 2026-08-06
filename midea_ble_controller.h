@@ -7,18 +7,27 @@
 #include <cstdio>
 #include <algorithm>
 #include <functional>
-#include <esphome/core/hal.h>  // 【修复】替换 Arduino.h，使用 ESPHome 的 HAL 层
+#include <esphome/core/hal.h>
 
 // ================================================================
-//                    1. 美的 BLE 协议 - 指令生成 (核心协议)
+//                    实体同步回调
+// ================================================================
+struct MideaDevice;
+using EntitySyncCallback = std::function<void(int idx, const MideaDevice& dev)>;
+static EntitySyncCallback g_sync_callback = nullptr;
+
+static void register_entity_sync(EntitySyncCallback cb) {
+    g_sync_callback = cb;
+}
+
+// ================================================================
+//                    1. 美的 BLE 协议 - 指令生成
 // ================================================================
 
-// ========== 加密表生成 ==========
 inline std::vector<uint8_t> midea_encode_table(const std::string &mac) {
     uint8_t hx[6];
-    for(int i=0; i<6; i++) 
+    for(int i=0; i<6; i++)
         hx[i] = std::stoi(mac.substr(i*2, 2), nullptr, 16);
-    
     std::vector<uint8_t> tb(16);
     int l=0, r=1;
     for(int i=0; i<15; i++) {
@@ -31,27 +40,22 @@ inline std::vector<uint8_t> midea_encode_table(const std::string &mac) {
     return tb;
 }
 
-// ========== 生成单个广播包 ==========
-inline std::string midea_make_packet(const std::string &mac, 
-                                      const std::vector<uint8_t> &values, 
+inline std::string midea_make_packet(const std::string &mac,
+                                      const std::vector<uint8_t> &values,
                                       int flag) {
     auto tb = midea_encode_table(mac);
-    
     uint8_t ch=0x01, ver=0x01;
     uint8_t cmd_type = (values.size() > 1) ? 0x01 : 0x00;
     uint8_t chk = (ch + ver + cmd_type);
     for(auto v : values) chk = (chk + v) & 0xFF;
-    
     std::vector<uint8_t> p = {ch, ver, cmd_type};
     for(auto v : values) p.push_back(v);
     while(p.size() < 15) p.push_back(0x00);
     p.push_back(chk);
-    
     const char* H = "0123456789ABCDEF";
     auto th = [&](uint8_t b) -> std::string {
         return std::string(1, H[b>>4]) + std::string(1, H[b&0xF]);
     };
-    
     std::string s = "0201021BFF114D19" + th(0x10 | (flag & 0x0F)) + mac + "01";
     int idx = flag & 0x0F;
     for(size_t i=1; i<16; i++) {
@@ -61,19 +65,16 @@ inline std::string midea_make_packet(const std::string &mac,
     return s;
 }
 
-// ========== 生成结束包 ==========
 inline std::string midea_end_packet(const std::string &mac, int flag) {
     return midea_make_packet(mac, {0x00}, flag);
 }
 
-// ========== 生成完整命令（CMD + END） ==========
-inline std::string midea_build_cmd(const std::string &mac, 
-                                    const std::vector<uint8_t> &values, 
+inline std::string midea_build_cmd(const std::string &mac,
+                                    const std::vector<uint8_t> &values,
                                     int ctrl_f, int end_f) {
     return midea_make_packet(mac, values, ctrl_f) + "|" + midea_end_packet(mac, end_f);
 }
 
-// ========== 辅助函数 (用于发送指令) ==========
 inline uint8_t midea_kelvin_to_val(int kelvin) {
     return std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0)));
 }
@@ -82,7 +83,6 @@ inline uint8_t midea_pct_to_val(int pct) {
     return std::round(pct * 255.0 / 100.0);
 }
 
-// ========== 灯光命令 ==========
 inline std::string midea_light_on(const std::string &mac, int pct, int kelvin) {
     uint8_t bv = midea_pct_to_val(pct);
     uint8_t tv = midea_kelvin_to_val(kelvin);
@@ -104,7 +104,6 @@ inline std::string midea_light_color_temp(const std::string &mac, int kelvin) {
     return midea_build_cmd(mac, {0x55, tv}, 7, 12);
 }
 
-// ========== 风扇命令 ==========
 inline std::string midea_fan_on(const std::string &mac, int speed) {
     uint8_t cmd; int cf, ef;
     switch(speed) {
@@ -123,9 +122,8 @@ inline std::string midea_fan_off(const std::string &mac) {
     return midea_build_cmd(mac, {0x09}, 8, 15);
 }
 
-
 // ================================================================
-//                    2. 辅助函数 (用于解析 BLE 广播)
+//                    2. 辅助函数 (解析 BLE 广播)
 // ================================================================
 
 static std::string mac_bytes_to_str(const uint8_t* mac) {
@@ -135,18 +133,17 @@ static std::string mac_bytes_to_str(const uint8_t* mac) {
     return std::string(buf);
 }
 
-static int raw_to_percent(uint8_t raw) { 
+static int raw_to_percent(uint8_t raw) {
     int pct = (int)(raw / 255.0f * 100.0f);
     return (pct < 0) ? 0 : ((pct > 100) ? 100 : pct);
 }
 
-static int raw_to_kelvin(uint8_t raw) { 
+static int raw_to_kelvin(uint8_t raw) {
     int pct = (int)(raw / 255.0f * 100.0f);
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
-    return 2700 + (6500 - 2700) * pct / 100; 
+    return 2700 + (6500 - 2700) * pct / 100;
 }
-
 
 // ================================================================
 //                    3. 设备模型 (Device Model)
@@ -159,18 +156,15 @@ struct MideaDevice {
     uint8_t mac[6];
     const char* light_topic;
     const char* fan_topic;
-    
     bool light_on = false;
     int brightness = 50;
     int color_temp = 4600;
     bool fan_on = false;
     int fan_speed = 1;
-    
     uint32_t last_publish_ms = 0;
-    
+
     std::string mac_str() const { return mac_bytes_to_str(mac); }
-    
-    // 调用底层协议函数生成指令
+
     std::string cmd_light_on() const { return midea_light_on(mac_str(), brightness, color_temp); }
     std::string cmd_light_off() const { return midea_light_off(mac_str()); }
     std::string cmd_fan_on() const { return midea_fan_on(mac_str(), fan_speed); }
@@ -183,7 +177,7 @@ struct MideaDevice {
         if (c) { light_on = on; brightness = brt; color_temp = ct; }
         return c;
     }
-    
+
     bool update_fan(bool on, int spd) {
         bool c = (fan_on != on) || (fan_speed != spd);
         if (c) { fan_on = on; fan_speed = spd; }
@@ -198,9 +192,8 @@ static MideaDevice g_devices[DEVICE_COUNT] = {
     {"Living Room", {0xCD, 0xAB, 0x38, 0x70, 0x00, 0x00}, "kktlight002", "kktfan003", false, 50, 4600, false, 1, 0}
 };
 
-
 // ================================================================
-//                    4. BLE 队列 & MQTT 发布管理
+//                    4. BLE 队列 & MQTT 发布
 // ================================================================
 
 struct BleQueueItem { std::string hex; uint32_t send_at; };
@@ -212,12 +205,10 @@ static void ble_set_send_function(std::function<void(const std::string&)> fn) { 
 static void mqtt_set_publish_function(std::function<void(const char*, const char*)> fn) { g_mqtt_pub_fn = fn; }
 
 static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) {
-    // 【修复】使用 esphome::millis()
     g_ble_queue.push_back({hex, esphome::millis() + delay_ms});
 }
 
 static void ble_queue_process() {
-    // 【修复】使用 esphome::millis()
     if (!g_ble_queue.empty() && esphome::millis() >= g_ble_queue[0].send_at && g_ble_send_fn) {
         g_ble_send_fn(g_ble_queue[0].hex);
         g_ble_queue.erase(g_ble_queue.begin());
@@ -226,10 +217,8 @@ static void ble_queue_process() {
 
 static void device_publish_bemfa(MideaDevice& dev) {
     if (!g_mqtt_pub_fn) return;
-    // 【修复】使用 esphome::millis()
-    if (esphome::millis() - dev.last_publish_ms < 200) return; 
+    if (esphome::millis() - dev.last_publish_ms < 200) return;
     dev.last_publish_ms = esphome::millis();
-    
     std::string lt = std::string(dev.light_topic) + "/up";
     if (dev.light_on) {
         std::string payload = "on#" + std::to_string(dev.brightness) + "#" + std::to_string(dev.color_temp);
@@ -237,7 +226,6 @@ static void device_publish_bemfa(MideaDevice& dev) {
     } else {
         g_mqtt_pub_fn(lt.c_str(), "off");
     }
-    
     std::string ft = std::string(dev.fan_topic) + "/up";
     if (dev.fan_on) {
         std::string payload = "on#" + std::to_string(dev.fan_speed);
@@ -254,9 +242,8 @@ static void publish_all_devices() {
     }
 }
 
-
 // ================================================================
-//                    5. BLE 广播解析 (带变化检测)
+//                    5. BLE 广播解析
 // ================================================================
 
 static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
@@ -265,15 +252,13 @@ static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
         if (memcmp(&raw[i], dev.mac, 6) != 0) continue;
         int rem = (int)sz - i;
         if (rem < 16) return -1;
-        
         bool l=false; int b=0, c=2700; bool f=false; int s=0;
         uint8_t mode = raw[i+8];
         bool alt = (mode==0x10||mode==0x11||mode==0x12||mode==0x13||mode==0x20||mode==0x21||mode==0x32||mode==0x33);
-        
         if (alt) {
             l = (mode==0x11||mode==0x13||mode==0x21||mode==0x33);
             f = (mode==0x12||mode==0x13||mode==0x20||mode==0x21||mode==0x32||mode==0x33);
-            b = raw_to_percent(raw[i+11]); 
+            b = raw_to_percent(raw[i+11]);
             c = raw_to_kelvin(raw[i+12]);
             s = f ? (raw[i+15]+1) : 0;
         } else {
@@ -283,40 +268,34 @@ static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
             if(rem>=17) { f=(raw[i+16]&0x01)!=0; }
             if(rem>=18&&f) s=raw[i+17]+1;
         }
-        
-        // 风速防乱跳修正
-        if(f && (s<1||s>6)) { 
-            int fs=0; 
-            if(rem>=16){int t=raw[i+15]+1; if(t>=1&&t<=6)fs=t;} 
-            if(fs==0&&rem>=18){int t=raw[i+17]+1; if(t>=1&&t<=6)fs=t;} 
-            s=(fs>=1&&fs<=6)?fs:1; 
+        if(f && (s<1||s>6)) {
+            int fs=0;
+            if(rem>=16){int t=raw[i+15]+1; if(t>=1&&t<=6)fs=t;}
+            if(fs==0&&rem>=18){int t=raw[i+17]+1; if(t>=1&&t<=6)fs=t;}
+            s=(fs>=1&&fs<=6)?fs:1;
         } else if(!f) {
             s=0;
         }
-
         bool lc = dev.update_light(l, b, c);
         bool fc = dev.update_fan(f, s);
-        
-        // 【关键修改】：只有状态真正发生变化时，才推给巴法云，并返回设备索引
         if (lc || fc) {
             device_publish_bemfa(dev);
-            return idx; 
+            if (g_sync_callback) g_sync_callback(idx, dev);
+            return idx;
         }
-        return -1; // 没变化返回 -1
+        return -1;
     }
     return -1;
 }
 
-// 【关键修改】：返回发生变化的设备索引 (0-3)，无变化返回 -1
 static int parse_ble_advertisement(const std::vector<uint8_t>& raw) {
     if (raw.size() < 20) return -1;
     for (int i = 0; i < DEVICE_COUNT; i++) {
         int idx = parse_ble_device(raw.data(), raw.size(), i);
-        if (idx >= 0) return idx; 
+        if (idx >= 0) return idx;
     }
     return -1;
 }
-
 
 // ================================================================
 //                    6. MQTT 下行指令处理
@@ -325,62 +304,62 @@ static int parse_ble_advertisement(const std::vector<uint8_t>& raw) {
 static void handle_light_mqtt(int idx, const std::string& p) {
     if (idx < 0 || idx >= DEVICE_COUNT) return;
     MideaDevice& dev = g_devices[idx];
-    if (p == "on") { 
-        dev.light_on = true; 
-        if(dev.brightness<1)dev.brightness=50; 
-        ble_queue_add(dev.cmd_light_on()); 
+    if (p == "on") {
+        dev.light_on = true;
+        if(dev.brightness<1)dev.brightness=50;
+        ble_queue_add(dev.cmd_light_on());
     }
-    else if (p == "off") { 
-        dev.light_on = false; 
-        ble_queue_add(dev.cmd_light_off()); 
+    else if (p == "off") {
+        dev.light_on = false;
+        ble_queue_add(dev.cmd_light_off());
     }
     else if (p.find("on#") == 0) {
         std::string r = p.substr(3); size_t pos = r.find('#');
         dev.brightness = std::stoi(r.substr(0, pos));
         if(pos!=std::string::npos){
-            int v=std::stoi(r.substr(pos+1)); 
+            int v=std::stoi(r.substr(pos+1));
             if(v>=2700&&v<=6500)dev.color_temp=v;
         }
-        dev.light_on = true; 
+        dev.light_on = true;
         ble_queue_add(dev.cmd_light_on());
     }
     device_publish_bemfa(dev);
+    if (g_sync_callback) g_sync_callback(idx, dev);
 }
 
 static void handle_fan_mqtt(int idx, const std::string& p) {
     if (idx < 0 || idx >= DEVICE_COUNT) return;
     MideaDevice& dev = g_devices[idx];
-    if (p == "on") { 
-        dev.fan_on = true; 
-        if(dev.fan_speed<1)dev.fan_speed=1; 
-        ble_queue_add(dev.cmd_fan_on()); 
+    if (p == "on") {
+        dev.fan_on = true;
+        if(dev.fan_speed<1)dev.fan_speed=1;
+        ble_queue_add(dev.cmd_fan_on());
     }
-    else if (p == "off") { 
-        dev.fan_on = false; 
-        ble_queue_add(dev.cmd_fan_off()); 
+    else if (p == "off") {
+        dev.fan_on = false;
+        ble_queue_add(dev.cmd_fan_off());
     }
-    else if (p.find("on#") == 0) { 
-        int s=std::stoi(p.substr(3)); 
-        if(s<1)s=1; if(s>6)s=6; 
-        dev.fan_on=true; 
-        dev.fan_speed=s; 
-        ble_queue_add(dev.cmd_fan_on()); 
+    else if (p.find("on#") == 0) {
+        int s=std::stoi(p.substr(3));
+        if(s<1)s=1; if(s>6)s=6;
+        dev.fan_on=true;
+        dev.fan_speed=s;
+        ble_queue_add(dev.cmd_fan_on());
     }
     device_publish_bemfa(dev);
+    if (g_sync_callback) g_sync_callback(idx, dev);
 }
-
 
 // ================================================================
 //                    7. 定时任务调度
 // ================================================================
 
-static void tick_ble_queue() { 
-    ble_queue_process(); 
+static void tick_ble_queue() {
+    ble_queue_process();
 }
 
 static void tick_heartbeat() {
     static uint32_t last_hb = 0;
-    // 【修复】使用 esphome::millis()
     if (esphome::millis() - last_hb < 60000) return;
     last_hb = esphome::millis();
     publish_all_devices();
