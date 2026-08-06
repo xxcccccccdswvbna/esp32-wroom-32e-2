@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [dan-zidingyi]
+    branches: [esp32-1]
   workflow_dispatch:
 
 permissions:
