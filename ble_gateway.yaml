@@ -388,84 +388,46 @@ esp32_ble_tracker:
                 if (memcmp(&raw[i], zzw_mac, 6) == 0) {
                   int remaining = (int)raw.size() - i;
                   if (remaining < 16) break;
-
                   bool light_on = false;
                   int brt = 0;
                   int ct_k = 2700;
                   bool fan_run = false;
                   int fan_spd = 0;
-
                   uint8_t mode = raw[i+8];
-                  bool alt_valid =
-                      (mode == 0x10 || mode == 0x11 ||
-                       mode == 0x12 || mode == 0x13 ||
-                       mode == 0x20 || mode == 0x21 ||
-                       mode == 0x32 || mode == 0x33);
-
+                  bool alt_valid = (mode == 0x10 || mode == 0x11 || mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
                   if (alt_valid) {
-                    // 标准美的风扇灯广播格式
                     light_on = (mode == 0x11 || mode == 0x13 || mode == 0x21 || mode == 0x33);
                     fan_run = (mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-
                     brt = (int)(raw[i+11] / 255.0f * 100.0f);
                     ct_k = 2700 + (6500-2700) * (int)(raw[i+12] / 255.0f * 100.0f) / 100;
-
                     fan_spd = fan_run ? (raw[i+15] + 1) : 0;
                   } else {
-                    // 兜底：尽量按你原来的方式解析，但避免越界
-                    if (remaining >= 8) {
-                      light_on = (raw[i+7] == 0x01);
-                    }
-
-                    if (remaining >= 13) {
-                      brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                    }
-
-                    if (remaining >= 14) {
-                      ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                    }
-
+                    if (remaining >= 8) light_on = (raw[i+7] == 0x01);
+                    if (remaining >= 13) brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                    if (remaining >= 14) ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
                     if (remaining >= 17) {
                       uint8_t fs = raw[i+16];
                       fan_run = (fs & 0x01) != 0;
                     }
-
-                    if (remaining >= 18 && fan_run) {
-                      fan_spd = raw[i+17] + 1;
-                    }
+                    if (remaining >= 18 && fan_run) fan_spd = raw[i+17] + 1;
                   }
-
-                  // 风速必须在 1-6 范围内，否则尝试修正
                   if (fan_run) {
                     if (fan_spd < 1 || fan_spd > 6) {
                       int fixed_speed = 0;
-
-                      // 优先标准格式风速位置
                       if (remaining >= 16) {
                         int s15 = raw[i+15] + 1;
-                        if (s15 >= 1 && s15 <= 6) {
-                          fixed_speed = s15;
-                        }
+                        if (s15 >= 1 && s15 <= 6) fixed_speed = s15;
                       }
-
-                      // 再尝试原来的位置
                       if (fixed_speed == 0 && remaining >= 18) {
                         int s17 = raw[i+17] + 1;
-                        if (s17 >= 1 && s17 <= 6) {
-                          fixed_speed = s17;
-                        }
+                        if (s17 >= 1 && s17 <= 6) fixed_speed = s17;
                       }
-wfan002/up
-                      if (fixed_speed >= 1 && fixed_speed <= 6) {
-                        fan_spd = fixed_speed;
-                      } else {
-                        fan_spd = 1;
-                      }
+                      if (fixed_speed >= 1 && fixed_speed <= 6) fan_spd = fixed_speed;
+                      else fan_spd = 1;
                     }
                   } else {
                     fan_spd = 0;
                   }
-
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -474,25 +436,15 @@ wfan002/up
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
-
                     if(light_on) id(bemfa).publish("zzwlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("zzwlight002/up","off");
-
                     if(fan_run) id(bemfa).publish("zzwfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("zzwfan003/up","off");
-
-                    id(zzw_light_on).publish_state(light_on);
-                    id(zzw_brt).publish_state(brt);
-                    id(zzw_ct).publish_state(ct_k);
-                    id(zzw_fan_on).publish_state(fan_run);
-                    id(zzw_spd).publish_state(fan_spd);
-
-                    id(zzw_light_sw).publish_state(light_on);
-                    id(zzw_fan_sw).publish_state(fan_run);
-
-                    id(zzw_brt_n).publish_state(brt);
-                    id(zzw_ct_n).publish_state(ct_k);
-                    id(zzw_spd_n).publish_state(fan_spd);
+                    id(zzw_light_on).publish_state(light_on); id(zzw_brt).publish_state(brt);
+                    id(zzw_ct).publish_state(ct_k); id(zzw_fan_on).publish_state(fan_run);
+                    id(zzw_spd).publish_state(fan_spd); id(zzw_light_sw).publish_state(light_on);
+                    id(zzw_fan_sw).publish_state(fan_run); id(zzw_brt_n).publish_state(brt);
+                    id(zzw_ct_n).publish_state(ct_k); id(zzw_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
@@ -503,84 +455,46 @@ wfan002/up
                 if (memcmp(&raw[i], kkt_mac, 6) == 0) {
                   int remaining = (int)raw.size() - i;
                   if (remaining < 16) break;
-
                   bool light_on = false;
                   int brt = 0;
                   int ct_k = 2700;
                   bool fan_run = false;
                   int fan_spd = 0;
-
                   uint8_t mode = raw[i+8];
-                  bool alt_valid =
-                      (mode == 0x10 || mode == 0x11 ||
-                       mode == 0x12 || mode == 0x13 ||
-                       mode == 0x20 || mode == 0x21 ||
-                       mode == 0x32 || mode == 0x33);
-
+                  bool alt_valid = (mode == 0x10 || mode == 0x11 || mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
                   if (alt_valid) {
-                    // 标准美的风扇灯广播格式
                     light_on = (mode == 0x11 || mode == 0x13 || mode == 0x21 || mode == 0x33);
                     fan_run = (mode == 0x12 || mode == 0x13 || mode == 0x20 || mode == 0x21 || mode == 0x32 || mode == 0x33);
-
                     brt = (int)(raw[i+11] / 255.0f * 100.0f);
                     ct_k = 2700 + (6500-2700) * (int)(raw[i+12] / 255.0f * 100.0f) / 100;
-
                     fan_spd = fan_run ? (raw[i+15] + 1) : 0;
                   } else {
-                    // 兜底：尽量按你原来的方式解析，但避免越界
-                    if (remaining >= 8) {
-                      light_on = (raw[i+7] == 0x01);
-                    }
-
-                    if (remaining >= 13) {
-                      brt = (int)(raw[i+12] / 255.0f * 100.0f);
-                    }
-
-                    if (remaining >= 14) {
-                      ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
-                    }
-
+                    if (remaining >= 8) light_on = (raw[i+7] == 0x01);
+                    if (remaining >= 13) brt = (int)(raw[i+12] / 255.0f * 100.0f);
+                    if (remaining >= 14) ct_k = 2700 + (6500-2700) * (int)(raw[i+13] / 255.0f * 100.0f) / 100;
                     if (remaining >= 17) {
                       uint8_t fs = raw[i+16];
                       fan_run = (fs & 0x01) != 0;
                     }
-
-                    if (remaining >= 18 && fan_run) {
-                      fan_spd = raw[i+17] + 1;
-                    }
+                    if (remaining >= 18 && fan_run) fan_spd = raw[i+17] + 1;
                   }
-
-                  // 风速必须在 1-6 范围内，否则尝试修正
                   if (fan_run) {
                     if (fan_spd < 1 || fan_spd > 6) {
                       int fixed_speed = 0;
-
-                      // 优先标准格式风速位置
                       if (remaining >= 16) {
                         int s15 = raw[i+15] + 1;
-                        if (s15 >= 1 && s15 <= 6) {
-                          fixed_speed = s15;
-                        }
+                        if (s15 >= 1 && s15 <= 6) fixed_speed = s15;
                       }
-
-                      // 再尝试原来的位置
                       if (fixed_speed == 0 && remaining >= 18) {
                         int s17 = raw[i+17] + 1;
-                        if (s17 >= 1 && s17 <= 6) {
-                          fixed_speed = s17;
-                        }
+                        if (s17 >= 1 && s17 <= 6) fixed_speed = s17;
                       }
-
-                      if (fixed_speed >= 1 && fixed_speed <= 6) {
-                        fan_spd = fixed_speed;
-                      } else {
-                        fan_spd = 1;
-                      }
+                      if (fixed_speed >= 1 && fixed_speed <= 6) fan_spd = fixed_speed;
+                      else fan_spd = 1;
                     }
                   } else {
                     fan_spd = 0;
                   }
-
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -589,25 +503,15 @@ wfan002/up
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
-
                     if(light_on) id(bemfa).publish("kktlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("kktlight002/up","off");
-
                     if(fan_run) id(bemfa).publish("kktfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("kktfan003/up","off");
-
-                    id(kkt_light_on).publish_state(light_on);
-                    id(kkt_brt).publish_state(brt);
-                    id(kkt_ct).publish_state(ct_k);
-                    id(kkt_fan_on).publish_state(fan_run);
-                    id(kkt_spd).publish_state(fan_spd);
-
-                    id(kkt_light_sw).publish_state(light_on);
-                    id(kkt_fan_sw).publish_state(fan_run);
-
-                    id(kkt_brt_n).publish_state(brt);
-                    id(kkt_ct_n).publish_state(ct_k);
-                    id(kkt_spd_n).publish_state(fan_spd);
+                    id(kkt_light_on).publish_state(light_on); id(kkt_brt).publish_state(brt);
+                    id(kkt_ct).publish_state(ct_k); id(kkt_fan_on).publish_state(fan_run);
+                    id(kkt_spd).publish_state(fan_spd); id(kkt_light_sw).publish_state(light_on);
+                    id(kkt_fan_sw).publish_state(fan_run); id(kkt_brt_n).publish_state(brt);
+                    id(kkt_ct_n).publish_state(ct_k); id(kkt_spd_n).publish_state(fan_spd);
                   }
                   break;
                 }
