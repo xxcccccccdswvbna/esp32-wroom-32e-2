@@ -14,18 +14,19 @@ public:
     void send_hex(const std::string &hex);
 
 private:
-    static constexpr uint32_t ADV_MS   = 200;
-    static constexpr uint32_t COOL_MS  = 500;
-    static constexpr uint32_t GAP_MS   = 800;
-
-    bool     adv_{false}, cool_{false}, wait_{false};
+    static constexpr uint32_t ADV_MS  = 200;
+    static constexpr uint32_t COOL_MS = 500;
+    static constexpr uint32_t GAP_MS  = 800;
+    bool adv_{false}, cool_{false}, wait_{false};
     uint32_t t0_{0}, t1_{0}, t2_{0};
     std::deque<std::string> q_;
-
     void raw_(const std::string &h);
     void next_();
     static std::vector<uint8_t> bytes_(const std::string &h);
 };
+
+extern BLETx *global_ble_tx;
+inline void ble_tx_send(const std::string &hex) { if(global_ble_tx) global_ble_tx->send_hex(hex); }
 
 }  // namespace ble_tx
 }  // namespace esphome
