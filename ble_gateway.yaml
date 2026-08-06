@@ -1,14 +1,14 @@
 # ===================== 项目配置 =====================
 substitutions:
-  project_name: "byy1"
-  build_time: "Unknown"
+  project_name: "byy1"        # 项目名称
+  build_time: "Unknown"       # 编译时间（CI/CD 自动注入）
 
 esphome:
   name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
   includes:
-    - midea_ble_controller.h
+    - midea_ble_controller.h  # 引入加密算法头文件
 
 esp32:
   board: esp32dev
@@ -16,77 +16,112 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_FREERTOS_UNICORE: y
-      CONFIG_BT_ENABLED: y
-      CONFIG_BT_BLE_ENABLED: y
+      CONFIG_FREERTOS_UNICORE: y   # 单核模式（减少蓝牙干扰）
+      CONFIG_BT_ENABLED: y         # 启用蓝牙
+      CONFIG_BT_BLE_ENABLED: y     # 启用 BLE
 
+# ===================== 系统基础 =====================
 logger:
-  baud_rate: 0
+  baud_rate: 0    # 关闭串口日志（释放资源）
   level: INFO
 
 wifi:
   ssid: "CC"
   password: "chen1122"
   fast_connect: true
-  power_save_mode: none
+  power_save_mode: none            # 关闭 WiFi 省电（影响蓝牙）
   ap:
-    ssid: "BLE-GW Fallback"
+    ssid: "BLE-GW Fallback"       # 热点模式（WiFi 断开时备用）
     password: "12345678"
 
-captive_portal:
+captive_portal:                     # WiFi 配置门户
 web_server:
-  port: 80
+  port: 80                         # Web 管理界面
 ota:
-  - platform: esphome
+  - platform: esphome              # 无线升级
 api:
-  reboot_timeout: 0s
+  reboot_timeout: 0s               # API 超时设置
+  # ====== 通用控制服务（支持任意 MAC） ======
   services:
+    # 发送原始 HEX
     - service: send_raw_hex
       variables:
         hex_data: string
       then:
         - lambda: 'id(tx).send_hex(hex_data);'
+    
+    # 灯光开（mac, brightness%, kelvin）
+    - service: midea_light_on
+      variables: { mac: string, brightness: int, kelvin: int }
+      then:
+        - lambda: 'id(tx).send_hex(midea_light_on(mac, brightness, kelvin));'
+    
+    # 灯光关
+    - service: midea_light_off
+      variables: { mac: string }
+      then:
+        - lambda: 'id(tx).send_hex(midea_light_off(mac));'
+    
+    # 风扇开（mac, speed 1-6）
+    - service: midea_fan_on
+      variables: { mac: string, speed: int }
+      then:
+        - lambda: 'id(tx).send_hex(midea_fan_on(mac, speed));'
+    
+    # 风扇关
+    - service: midea_fan_off
+      variables: { mac: string }
+      then:
+        - lambda: 'id(tx).send_hex(midea_fan_off(mac));'
+    
+    # 定时设置
+    - service: midea_timer
+      variables: { mac: string, minutes: int }
+      then:
+        - lambda: 'id(tx).send_hex(midea_timer(mac, minutes));'
 
+# ===================== BLE 组件 =====================
 external_components:
   - source:
       type: local
       path: components
 
-ble_tx:
+ble_tx:            # 你的 BLE 发送组件
   id: tx
 
 esp32_ble:
   io_capability: none
   enable_on_boot: true
 
-bluetooth_proxy:
+bluetooth_proxy:   # HA 蓝牙代理
   active: true
   cache_services: true
 
-# ===================== 全局变量 =====================
+# ===================== 全局变量（色温记忆） =====================
 globals:
-  - id: ct_current_ct_kelvin
+  - id: ct_current_ct_kelvin     # 餐厅灯当前色温
     type: int
     restore_value: no
     initial_value: '4600'
-  - id: cw_current_ct_kelvin
+  - id: cw_current_ct_kelvin     # 次卧灯当前色温
     type: int
     restore_value: no
     initial_value: '4600'
 
-# ===================== 巴法云 MQTT =====================
+# ===================== 巴法云 MQTT（小爱同学控制） =====================
 mqtt:
   id: bemfa
   broker: bemfa.com
   port: 9501
-  username: "97109945d7e24559b3e4ca7a1f8ef160"
-  password: "97109945d7e24559b3e4ca7a1f8ef160"
-  client_id: "97109945d7e24559b3e4ca7a1f8ef160"
+  username: "你的UID"
+  password: "你的UID"
+  client_id: "你的UID"
   keepalive: 30s
   discovery: false
   birth_message:
   will_message:
   on_message:
+    # ----- 餐厅灯 -----
     - topic: "ctlight002"
       then:
         - lambda: |-
@@ -96,8 +131,6 @@ mqtt:
               if(brt < 1) brt = 50;
               id(tx).send_hex(midea_light_on("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
-              id(ct_brt).publish_state(brt);
-              id(ct_ct).publish_state(ct);
             } else if(x == "off") {
               id(tx).send_hex(midea_light_off("488027700000"));
               id(ct_light_on).publish_state(false);
@@ -115,10 +148,9 @@ mqtt:
               }
               id(tx).send_hex(midea_light_on("488027700000", brt, ct));
               id(ct_light_on).publish_state(true);
-              id(ct_brt).publish_state(brt);
-              id(ct_ct).publish_state(ct);
             }
 
+    # ----- 餐厅风扇 -----
     - topic: "ctfan003"
       then:
         - lambda: |-
@@ -127,7 +159,6 @@ mqtt:
               if(spd < 1) spd = 1;
               id(tx).send_hex(midea_fan_on("488027700000", spd));
               id(ct_fan_on).publish_state(true);
-              id(ct_spd).publish_state(spd);
             } else if(x == "off") {
               id(tx).send_hex(midea_fan_off("488027700000"));
               id(ct_fan_on).publish_state(false);
@@ -135,9 +166,9 @@ mqtt:
               int s = std::stoi(x.substr(3));
               id(tx).send_hex(midea_fan_on("488027700000", s));
               id(ct_fan_on).publish_state(true);
-              id(ct_spd).publish_state(s);
             }
 
+    # ----- 次卧灯 -----
     - topic: "cwlight002"
       then:
         - lambda: |-
@@ -147,8 +178,6 @@ mqtt:
               if(brt < 1) brt = 50;
               id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
-              id(cw_brt).publish_state(brt);
-              id(cw_ct).publish_state(ct);
             } else if(x == "off") {
               id(tx).send_hex(midea_light_off("F0CF2D700000"));
               id(cw_light_on).publish_state(false);
@@ -166,10 +195,9 @@ mqtt:
               }
               id(tx).send_hex(midea_light_on("F0CF2D700000", brt, ct));
               id(cw_light_on).publish_state(true);
-              id(cw_brt).publish_state(brt);
-              id(cw_ct).publish_state(ct);
             }
 
+    # ----- 次卧风扇 -----
     - topic: "cwfan003"
       then:
         - lambda: |-
@@ -178,7 +206,6 @@ mqtt:
               if(spd < 1) spd = 1;
               id(tx).send_hex(midea_fan_on("F0CF2D700000", spd));
               id(cw_fan_on).publish_state(true);
-              id(cw_spd).publish_state(spd);
             } else if(x == "off") {
               id(tx).send_hex(midea_fan_off("F0CF2D700000"));
               id(cw_fan_on).publish_state(false);
@@ -186,15 +213,14 @@ mqtt:
               int s = std::stoi(x.substr(3));
               id(tx).send_hex(midea_fan_on("F0CF2D700000", s));
               id(cw_fan_on).publish_state(true);
-              id(cw_spd).publish_state(s);
             }
 
-# ===================== BLE 扫描 =====================
+# ===================== BLE 扫描与状态上报 =====================
 esp32_ble_tracker:
   scan_parameters:
-    interval: 640ms
-    window: 30ms
-    active: false
+    interval: 640ms    # 扫描间隔
+    window: 30ms       # 扫描窗口
+    active: false      # 被动扫描
   on_ble_advertise:
     - then:
         - lambda: |-
@@ -202,6 +228,8 @@ esp32_ble_tracker:
             for (auto &data : datas) {
               auto &raw = data.data;
               if (raw.size() < 20) continue;
+
+              // ===== 餐厅设备 =====
               uint8_t ct_mac[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], ct_mac, 6) == 0) {
@@ -211,6 +239,7 @@ esp32_ble_tracker:
                   uint8_t fs = raw[i+16];
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -219,10 +248,12 @@ esp32_ble_tracker:
                   bool rt=(millis()-lch<10000)&&(rc<3)&&(millis()-lr>3000);
                   if(ch||hb||rt){
                     if(rt)rc++;else rc=0; lr=millis();
+                    // 上报巴法云
                     if(light_on) id(bemfa).publish("ctlight002/up","on#"+std::to_string(brt)+"#"+std::to_string(ct_k));
                     else id(bemfa).publish("ctlight002/up","off");
                     if(fan_run) id(bemfa).publish("ctfan003/up","on#"+std::to_string(fan_spd));
                     else id(bemfa).publish("ctfan003/up","off");
+                    // 更新 HA 传感器
                     id(ct_light_on).publish_state(light_on); id(ct_brt).publish_state(brt);
                     id(ct_ct).publish_state(ct_k); id(ct_fan_on).publish_state(fan_run);
                     id(ct_spd).publish_state(fan_spd); id(ct_light_sw).publish_state(light_on);
@@ -232,6 +263,8 @@ esp32_ble_tracker:
                   break;
                 }
               }
+
+              // ===== 次卧设备 =====
               uint8_t cw_mac[6] = {0xF0, 0xCF, 0x2D, 0x70, 0x00, 0x00};
               for (int i = 2; i <= (int)raw.size() - 6; i++) {
                 if (memcmp(&raw[i], cw_mac, 6) == 0) {
@@ -241,6 +274,7 @@ esp32_ble_tracker:
                   uint8_t fs = raw[i+16];
                   bool fan_run = (fs & 0x01) != 0;
                   int fan_spd = fan_run ? (raw[i+17] + 1) : 0;
+
                   static bool ll=false, lfr=false; static int lb=-1, lc=-1, lfs=-1;
                   static uint32_t lr=0, lch=0; static uint8_t rc=0;
                   bool ch=(light_on!=ll)||(brt!=lb)||(ct_k!=lc)||(fan_run!=lfr)||(fan_spd!=lfs);
@@ -264,27 +298,29 @@ esp32_ble_tracker:
               }
             }
 
-# ===================== 开关 =====================
+# ===================== HA 控制组件 =====================
 switch:
+  # ----- 餐厅灯开关 -----
   - platform: template
     name: "Dining Light"
     id: ct_light_sw
     icon: mdi:ceiling-light
-    optimistic: false
+    optimistic: false                    # 非乐观模式，状态来自 BLE 扫描
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: |-
           int ct = id(ct_current_ct_kelvin);
           int brt = id(ct_brt).state;
-          if(brt < 1) brt = 50;
+          if(brt < 1) brt = 50;          # 默认 50% 亮度
           id(tx).send_hex(midea_light_on("488027700000", brt, ct));
-          id(ct_light_on).publish_state(true);
+          id(ct_light_on).publish_state(true);  # 乐观更新
     turn_off_action:
       - lambda: |-
           id(tx).send_hex(midea_light_off("488027700000"));
           id(ct_light_on).publish_state(false);
-    lambda: 'return id(ct_light_on).state;'
+    lambda: 'return id(ct_light_on).state;'  # 状态来自 BLE 反馈
 
+  # ----- 餐厅风扇开关 -----
   - platform: template
     name: "Dining Fan"
     id: ct_fan_sw
@@ -303,6 +339,7 @@ switch:
           id(ct_fan_on).publish_state(false);
     lambda: 'return id(ct_fan_on).state;'
 
+  # ----- 次卧灯开关 -----
   - platform: template
     name: "Bedroom Light"
     id: cw_light_sw
@@ -322,6 +359,7 @@ switch:
           id(cw_light_on).publish_state(false);
     lambda: 'return id(cw_light_on).state;'
 
+  # ----- 次卧风扇开关 -----
   - platform: template
     name: "Bedroom Fan"
     id: cw_fan_sw
@@ -342,12 +380,11 @@ switch:
 
 # ===================== Number 滑块 =====================
 number:
+  # ----- 餐厅灯亮度 1-100% -----
   - platform: template
     name: "Dining Brightness"
     id: ct_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
+    min_value: 1; max_value: 100; step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -359,27 +396,25 @@ number:
           id(ct_light_on).publish_state(true);
           id(ct_light_sw).publish_state(true);
 
+  # ----- 餐厅灯色温 2700-6500K -----
   - platform: template
     name: "Dining ColorTemp"
     id: ct_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
+    min_value: 2700; max_value: 6500; step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
       - lambda: |-
           int kelvin = (int)x;
-          id(ct_current_ct_kelvin) = kelvin;
+          id(ct_current_ct_kelvin) = kelvin;  # 记忆色温
           id(tx).send_hex(midea_light_color_temp("488027700000", kelvin));
           id(ct_ct).publish_state(kelvin);
 
+  # ----- 餐厅风扇档位 1-6 -----
   - platform: template
     name: "Dining Fan Speed"
     id: ct_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
+    min_value: 1; max_value: 6; step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -389,12 +424,11 @@ number:
           id(ct_fan_on).publish_state(true);
           id(ct_fan_sw).publish_state(true);
 
+  # ----- 次卧灯亮度 -----
   - platform: template
     name: "Bedroom Brightness"
     id: cw_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
+    min_value: 1; max_value: 100; step: 1
     unit_of_measurement: "%"
     icon: mdi:brightness-percent
     set_action:
@@ -406,12 +440,11 @@ number:
           id(cw_light_on).publish_state(true);
           id(cw_light_sw).publish_state(true);
 
+  # ----- 次卧灯色温 -----
   - platform: template
     name: "Bedroom ColorTemp"
     id: cw_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
+    min_value: 2700; max_value: 6500; step: 100
     unit_of_measurement: "K"
     icon: mdi:thermometer
     set_action:
@@ -421,12 +454,11 @@ number:
           id(tx).send_hex(midea_light_color_temp("F0CF2D700000", kelvin));
           id(cw_ct).publish_state(kelvin);
 
+  # ----- 次卧风扇档位 -----
   - platform: template
     name: "Bedroom Fan Speed"
     id: cw_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
+    min_value: 1; max_value: 6; step: 1
     icon: mdi:fan-speed-1
     set_action:
       - lambda: |-
@@ -436,89 +468,47 @@ number:
           id(cw_fan_on).publish_state(true);
           id(cw_fan_sw).publish_state(true);
 
-# ===================== 传感器 =====================
+# ===================== 传感器（状态显示） =====================
 sensor:
   - platform: template
-    name: "Dining Brt"
-    id: ct_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
+    name: "Dining Brt"; id: ct_brt
+    unit_of_measurement: "%"; accuracy_decimals: 0
   - platform: template
-    name: "Dining CT"
-    id: ct_ct
-    unit_of_measurement: "K"
+    name: "Dining CT"; id: ct_ct; unit_of_measurement: "K"
   - platform: template
-    name: "Dining Spd"
-    id: ct_spd
+    name: "Dining Spd"; id: ct_spd
   - platform: template
-    name: "Bedroom Brt"
-    id: cw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
+    name: "Bedroom Brt"; id: cw_brt
+    unit_of_measurement: "%"; accuracy_decimals: 0
   - platform: template
-    name: "Bedroom CT"
-    id: cw_ct
-    unit_of_measurement: "K"
+    name: "Bedroom CT"; id: cw_ct; unit_of_measurement: "K"
   - platform: template
-    name: "Bedroom Spd"
-    id: cw_spd
-  - platform: uptime
-    name: "Uptime"
-    update_interval: 60s
-  - platform: internal_temperature
-    name: "ESP32 Temp"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    update_interval: 60s
-  - platform: wifi_signal
-    name: "WiFi dBm"
-    id: wifi_signal_db
-    update_interval: 60s
+    name: "Bedroom Spd"; id: cw_spd
+  - platform: uptime; name: "Uptime"; update_interval: 60s
+  - platform: internal_temperature; name: "ESP32 Temp"
+    unit_of_measurement: "°C"; accuracy_decimals: 1; update_interval: 60s
+  - platform: wifi_signal; name: "WiFi dBm"; id: wifi_signal_db; update_interval: 60s
   - platform: copy
-    source_id: wifi_signal_db
-    name: "WiFi Pct"
+    source_id: wifi_signal_db; name: "WiFi Pct"
     filters:
       - lambda: return min(max(2*(x+100.0),0.0),100.0);
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
+    unit_of_measurement: "%"; accuracy_decimals: 0
 
 binary_sensor:
-  - platform: status
-    name: "Gateway Online"
-    device_class: connectivity
-  - platform: template
-    name: "Dining Light On"
-    id: ct_light_on
-    device_class: light
-  - platform: template
-    name: "Dining Fan On"
-    id: ct_fan_on
-    device_class: running
-  - platform: template
-    name: "Bedroom Light On"
-    id: cw_light_on
-    device_class: light
-  - platform: template
-    name: "Bedroom Fan On"
-    id: cw_fan_on
-    device_class: running
+  - platform: status; name: "Gateway Online"; device_class: connectivity
+  - platform: template; name: "Dining Light On"; id: ct_light_on; device_class: light
+  - platform: template; name: "Dining Fan On"; id: ct_fan_on; device_class: running
+  - platform: template; name: "Bedroom Light On"; id: cw_light_on; device_class: light
+  - platform: template; name: "Bedroom Fan On"; id: cw_fan_on; device_class: running
 
 text_sensor:
-  - platform: template
-    name: "Build Time"
-    lambda: 'return {"${build_time}"};'
-    update_interval: 3600s
-  - platform: version
-    name: "ESPHome Ver"
-    hide_timestamp: true
+  - platform: template; name: "Build Time"
+    lambda: 'return {"${build_time}"};'; update_interval: 3600s
+  - platform: version; name: "ESPHome Ver"; hide_timestamp: true
   - platform: wifi_info
-    ip_address:
-      name: "ESP IP"
-    ssid:
-      name: "ESP SSID"
+    ip_address: { name: "ESP IP" }
+    ssid: { name: "ESP SSID" }
 
 button:
-  - platform: restart
-    name: "Restart GW"
-    icon: mdi:restart
-    entity_category: diagnostic
+  - platform: restart; name: "Restart GW"
+    icon: mdi:restart; entity_category: diagnostic
