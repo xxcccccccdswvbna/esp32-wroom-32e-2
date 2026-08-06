@@ -77,7 +77,8 @@ def gen_globals(d):
     return r
 
 def gen_mqtt(c,d):
-    r=f"""mqtt:
+    lines = []
+    lines.append(f"""mqtt:
   id: bemfa
   broker: bemfa.com
   port: 9501
@@ -88,29 +89,32 @@ def gen_mqtt(c,d):
   discovery: false
   birth_message:
   will_message:
-  on_message:
-"""
+  on_message:""")
+
     for x in d:
         n=x['name'].lower(); m=x['mac']; lt=x['bemfa_light_topic']; ft=x['bemfa_fan_topic']
-        r+=f"""    - topic: "{lt}"
+        # 灯光
+        lines.append(f"""    - topic: "{lt}"
       then:
         - lambda: |-
             if(x=="on"){{ int ct=id({n}_ct_kelvin),brt=id({n}_brt).state; if(brt<1)brt=50; id(tx).send_hex(midea_light_on("{m}",brt,ct)); id({n}_light_on).publish_state(true); }}
             else if(x=="off"){{ id(tx).send_hex(midea_light_off("{m}")); id({n}_light_on).publish_state(false); }}
             else if(x.find("on#")==0){{ auto r=x.substr(3); auto p=r.find('#'); int brt=std::stoi(r.substr(0,p)),ct=id({n}_ct_kelvin);
               if(p!=std::string::npos){{ auto s=r.substr(p+1); if(!s.empty()){{ int pc=std::stoi(s); if(pc>=2700&&pc<=6500){{ct=pc;id({n}_ct_kelvin)=ct;}}}}}}
-              id(tx).send_hex(midea_light_on("{m}",brt,ct)); id({n}_light_on).publish_state(true); }}
-    - topic: "{ft}"
+              id(tx).send_hex(midea_light_on("{m}",brt,ct)); id({n}_light_on).publish_state(true); }}""")
+        # 风扇
+        lines.append(f"""    - topic: "{ft}"
       then:
         - lambda: |-
             if(x=="on"){{ int spd=id({n}_spd).state; if(spd<1)spd=1; id(tx).send_hex(midea_fan_on("{m}",spd)); id({n}_fan_on).publish_state(true); }}
             else if(x=="off"){{ id(tx).send_hex(midea_fan_off("{m}")); id({n}_fan_on).publish_state(false); }}
-            else if(x.find("on#")==0){{ int s=std::stoi(x.substr(3)); id(tx).send_hex(midea_fan_on("{m}",s)); id({n}_fan_on).publish_state(true); }}
-"""
-    return r
+            else if(x.find("on#")==0){{ int s=std::stoi(x.substr(3)); id(tx).send_hex(midea_fan_on("{m}",s)); id({n}_fan_on).publish_state(true); }}""")
+
+    return "\n".join(lines)
 
 def gen_ble(d):
-    r="""esp32_ble_tracker:
+    lines = []
+    lines.append("""esp32_ble_tracker:
   scan_parameters:
     interval: 640ms
     window: 30ms
@@ -119,12 +123,11 @@ def gen_ble(d):
     - then:
         - lambda: |-
             auto datas=x.get_manufacturer_datas();
-            for(auto&data:datas){auto&raw=data.data; if(raw.size()<20)continue;
-"""
+            for(auto&data:datas){auto&raw=data.data; if(raw.size()<20)continue;""")
     for x in d:
         n=x['name'].lower(); m=x['mac']; lt=x['bemfa_light_topic']; ft=x['bemfa_fan_topic']
         mb=", ".join([f"0x{m[i:i+2]}" for i in range(0,12,2)])
-        r+=f"""              uint8_t {n}_mac[6]={{{mb}}};
+        lines.append(f"""              uint8_t {n}_mac[6]={{{mb}}};
               for(int i=2;i<=(int)raw.size()-6;i++){{ if(memcmp(&raw[i],{n}_mac,6)==0){{
                 bool lo=(raw[i+7]==0x01); int br=(int)(raw[i+12]/255.0f*100.0f);
                 int ct=2700+(6500-2700)*(int)(raw[i+13]/255.0f*100.0f)/100;
@@ -144,10 +147,9 @@ def gen_ble(d):
                   id({n}_spd).publish_state(sp);
                 }}
                 break;
-              }}}}
-"""
-    r+="            }"
-    return r
+              }}}}""")
+    lines.append("            }")
+    return "\n".join(lines)
 
 def gen_controls(d):
     rl="light:\n"; rf="fan:\n"; rs="sensor:\n"; rb="binary_sensor:\n"
