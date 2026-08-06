@@ -2,7 +2,6 @@
 #include "esphome/core/component.h"
 #include "esphome/components/fan/fan.h"
 #include "midea_ble_controller.h"
-#include "components/ble_tx/ble_tx.h"
 
 namespace esphome {
 namespace midea_fan {
@@ -22,7 +21,12 @@ public:
         } else {
             cmd = midea_fan_off(mac_);
         }
-        if (!cmd.empty()) ble_tx_send(cmd);
+        if (!cmd.empty()) {
+            // 调用 BLE 网关发送
+            // 注意：需要在组件中获取 BLEGateway 实例，这里使用全局方式或通过 ID 获取
+            extern void ble_gw_send(const std::string &hex);
+            ble_gw_send(cmd);
+        }
     }
 
 private:
