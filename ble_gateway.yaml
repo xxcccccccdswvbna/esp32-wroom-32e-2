@@ -1,10 +1,16 @@
-# ===================== 项目配置 =====================
+# ===================== 项目配置 & MAC 地址管理 =====================
 substitutions:
-  project_name: "yyy1"
+  project_name: "vvt1"
   build_time: "Unknown"
+  
+  # ===== 更改设备 MAC 地址请修改这里 (12位纯字母数字) =====
+  mac_ct: "488027700000"   # 餐厅
+  mac_cw: "F0CF2D700000"   # 次卧
+  mac_zzw: "922635700000"  # 主卧
+  mac_kkt: "CDAB38700000"  # 客厅
 
 esphome:
-  name: ble-1
+  name: ble-3
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
   includes:
@@ -13,12 +19,17 @@ esphome:
     priority: 600
     then:
       - lambda: |-
-          ble_set_send_function([](const std::string& hex) {
-              id(tx).send_hex(hex);
-          });
-          mqtt_set_publish_function([](const char* topic, const char* payload) {
-              id(bemfa).publish(topic, payload);
-          });
+          // 1. 动态注入 MAC 地址
+          set_device_mac(0, "${mac_ct}");
+          set_device_mac(1, "${mac_cw}");
+          set_device_mac(2, "${mac_zzw}");
+          set_device_mac(3, "${mac_kkt}");
+          
+          // 2. 绑定底层函数
+          ble_set_send_function([](const std::string& hex) { id(tx).send_hex(hex); });
+          mqtt_set_publish_function([](const char* topic, const char* payload) { id(bemfa).publish(topic, payload); });
+          
+          // 3. 注册 HA 实体同步回调
           register_entity_sync([](int idx, const MideaDevice& dev) {
               if (idx == 0) {
                   id(ct_light_on).publish_state(dev.light_on); id(ct_fan_on).publish_state(dev.fan_on);
@@ -42,9 +53,6 @@ esphome:
                   id(kkt_light_sw).publish_state(dev.light_on); id(kkt_fan_sw).publish_state(dev.fan_on);
               }
           });
-      # 开机时点亮蓝灯和白灯
-      - light.turn_on: blue_led
-      - light.turn_on: white_led
 
 esp32:
   board: esp32dev
@@ -74,7 +82,6 @@ web_server:
   port: 80
 ota:
   - platform: esphome
-
 api:
   reboot_timeout: 0s
   services:
@@ -83,14 +90,6 @@ api:
         hex_data: string
       then:
         - lambda: 'id(tx).send_hex(hex_data);'
-  # 连上 Home Assistant 后，停止闪烁并关灯
-  on_client_connected:
-    - script.stop: offline_flash
-    - light.turn_off: white_led
-    - light.turn_off: blue_led
-  # 断开 Home Assistant 后，执行白灯闪烁脚本
-  on_client_disconnected:
-    - script.execute: offline_flash
 
 external_components:
   - source:
@@ -126,22 +125,6 @@ globals:
     type: int
     restore_value: no
     initial_value: '4600'
-  - id: do_factory_reset
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-
-# ===================== 离线闪烁脚本 =====================
-script:
-  - id: offline_flash
-    mode: restart
-    then:
-      - while:
-          condition:
-            lambda: 'return true;'
-          then:
-            - light.toggle: white_led
-            - delay: 500ms
 
 # ===================== 巴法云 MQTT =====================
 mqtt:
@@ -157,8 +140,7 @@ mqtt:
   will_message:
   on_connect:
     - delay: 2s
-    - lambda: |-
-        publish_all_devices();
+    - lambda: 'publish_all_devices();'
   on_message:
     - topic: "ctlight002"
       then:
@@ -195,9 +177,7 @@ esp32_ble_tracker:
     - then:
         - lambda: |-
             auto datas = x.get_manufacturer_datas();
-            for (auto &data : datas) {
-              parse_ble_advertisement(data.data);
-            }
+            for (auto &data : datas) parse_ble_advertisement(data.data);
 
 # ===================== 定时任务 =====================
 interval:
@@ -208,33 +188,7 @@ interval:
     then:
       - lambda: 'tick_heartbeat();'
 
-# ===================== LED 输出 (修正引脚为 27/26) =====================
-output:
-  - platform: gpio
-    id: blue_led_out
-    pin:
-      number: GPIO27
-      inverted: true
-  - platform: gpio
-    id: white_led_out
-    pin:
-      number: GPIO26
-      inverted: true
-
-# ===================== LED 灯光 =====================
-light:
-  - platform: binary
-    name: Blue LED
-    id: blue_led
-    output: blue_led_out
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: binary
-    name: White LED
-    id: white_led
-    output: white_led_out
-    restore_mode: RESTORE_DEFAULT_OFF
-
-# ===================== 按键 =====================
+# ===================== 状态反馈传感器 =====================
 binary_sensor:
   - platform: status
     name: "Gateway Online"
@@ -271,84 +225,8 @@ binary_sensor:
     name: "Living Room Fan On"
     id: kkt_fan_on
     device_class: running
-  - platform: gpio
-    id: key1
-    name: KEY1
-    pin: { number: GPIO34, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 8s]
-        then:
-          - if:
-              condition: { binary_sensor.is_on: key4 }
-              then:
-                - delay: 500ms
-                - if:
-                    condition: { binary_sensor.is_on: key4 }
-                    then:
-                      - lambda: 'id(do_factory_reset) = true;'
-                      - repeat:
-                          count: 5
-                          then:
-                            - light.toggle: white_led
-                            - delay: 100ms
-                      - lambda: 'App.reboot();'
-      - timing: [ON for at least 1.5s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key1", mode: "long" }
-      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key1", mode: "double" }
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key1", mode: "single" }
-  - platform: gpio
-    id: key2
-    name: KEY2
-    pin: { number: GPIO35, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }]
-  - platform: gpio
-    id: key3
-    name: KEY3
-    pin: { number: GPIO32, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
-  - platform: gpio
-    id: key4
-    name: KEY4
-    pin: { number: GPIO33, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
 
-# ===================== 开关 =====================
+# ===================== 控制开关 =====================
 switch:
   - platform: template
     name: "Dining Light"
@@ -361,12 +239,10 @@ switch:
           g_devices[0].light_on = true;
           if (g_devices[0].brightness < 1) g_devices[0].brightness = 50;
           ble_queue_add(g_devices[0].cmd_light_on(), 0);
-          id(ct_light_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[0].light_on = false;
           ble_queue_add(g_devices[0].cmd_light_off(), 0);
-          id(ct_light_on).publish_state(false);
     lambda: 'return g_devices[0].light_on;'
   - platform: template
     name: "Dining Fan"
@@ -379,12 +255,10 @@ switch:
           g_devices[0].fan_on = true;
           if (g_devices[0].fan_speed < 1) g_devices[0].fan_speed = 1;
           ble_queue_add(g_devices[0].cmd_fan_on(), 0);
-          id(ct_fan_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[0].fan_on = false;
           ble_queue_add(g_devices[0].cmd_fan_off(), 0);
-          id(ct_fan_on).publish_state(false);
     lambda: 'return g_devices[0].fan_on;'
   - platform: template
     name: "Bedroom Light"
@@ -397,12 +271,10 @@ switch:
           g_devices[1].light_on = true;
           if (g_devices[1].brightness < 1) g_devices[1].brightness = 50;
           ble_queue_add(g_devices[1].cmd_light_on(), 0);
-          id(cw_light_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[1].light_on = false;
           ble_queue_add(g_devices[1].cmd_light_off(), 0);
-          id(cw_light_on).publish_state(false);
     lambda: 'return g_devices[1].light_on;'
   - platform: template
     name: "Bedroom Fan"
@@ -415,12 +287,10 @@ switch:
           g_devices[1].fan_on = true;
           if (g_devices[1].fan_speed < 1) g_devices[1].fan_speed = 1;
           ble_queue_add(g_devices[1].cmd_fan_on(), 0);
-          id(cw_fan_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[1].fan_on = false;
           ble_queue_add(g_devices[1].cmd_fan_off(), 0);
-          id(cw_fan_on).publish_state(false);
     lambda: 'return g_devices[1].fan_on;'
   - platform: template
     name: "Master Light"
@@ -433,12 +303,10 @@ switch:
           g_devices[2].light_on = true;
           if (g_devices[2].brightness < 1) g_devices[2].brightness = 50;
           ble_queue_add(g_devices[2].cmd_light_on(), 0);
-          id(zzw_light_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[2].light_on = false;
           ble_queue_add(g_devices[2].cmd_light_off(), 0);
-          id(zzw_light_on).publish_state(false);
     lambda: 'return g_devices[2].light_on;'
   - platform: template
     name: "Master Fan"
@@ -451,12 +319,10 @@ switch:
           g_devices[2].fan_on = true;
           if (g_devices[2].fan_speed < 1) g_devices[2].fan_speed = 1;
           ble_queue_add(g_devices[2].cmd_fan_on(), 0);
-          id(zzw_fan_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[2].fan_on = false;
           ble_queue_add(g_devices[2].cmd_fan_off(), 0);
-          id(zzw_fan_on).publish_state(false);
     lambda: 'return g_devices[2].fan_on;'
   - platform: template
     name: "Living Room Light"
@@ -469,12 +335,10 @@ switch:
           g_devices[3].light_on = true;
           if (g_devices[3].brightness < 1) g_devices[3].brightness = 50;
           ble_queue_add(g_devices[3].cmd_light_on(), 0);
-          id(kkt_light_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[3].light_on = false;
           ble_queue_add(g_devices[3].cmd_light_off(), 0);
-          id(kkt_light_on).publish_state(false);
     lambda: 'return g_devices[3].light_on;'
   - platform: template
     name: "Living Room Fan"
@@ -487,15 +351,13 @@ switch:
           g_devices[3].fan_on = true;
           if (g_devices[3].fan_speed < 1) g_devices[3].fan_speed = 1;
           ble_queue_add(g_devices[3].cmd_fan_on(), 0);
-          id(kkt_fan_on).publish_state(true);
     turn_off_action:
       - lambda: |-
           g_devices[3].fan_on = false;
           ble_queue_add(g_devices[3].cmd_fan_off(), 0);
-          id(kkt_fan_on).publish_state(false);
     lambda: 'return g_devices[3].fan_on;'
 
-# ===================== Number 滑块 =====================
+# ===================== 调节滑块 =====================
 number:
   - platform: template
     name: "Dining Brightness"
@@ -508,10 +370,8 @@ number:
     set_action:
       - lambda: |-
           g_devices[0].brightness = (int)x;
+          g_devices[0].light_on = true;
           ble_queue_add(g_devices[0].cmd_brightness((int)x), 0);
-          id(ct_brt).publish_state((int)x);
-          id(ct_light_on).publish_state(true);
-          id(ct_light_sw).publish_state(true);
   - platform: template
     name: "Dining ColorTemp"
     id: ct_ct_n
@@ -524,7 +384,6 @@ number:
       - lambda: |-
           g_devices[0].color_temp = (int)x;
           ble_queue_add(g_devices[0].cmd_color_temp((int)x), 0);
-          id(ct_ct).publish_state((int)x);
   - platform: template
     name: "Dining Fan Speed"
     id: ct_spd_n
@@ -537,9 +396,6 @@ number:
           g_devices[0].fan_speed = (int)x;
           g_devices[0].fan_on = true;
           ble_queue_add(g_devices[0].cmd_fan_on(), 0);
-          id(ct_spd).publish_state((int)x);
-          id(ct_fan_on).publish_state(true);
-          id(ct_fan_sw).publish_state(true);
   - platform: template
     name: "Bedroom Brightness"
     id: cw_brt_n
@@ -551,10 +407,8 @@ number:
     set_action:
       - lambda: |-
           g_devices[1].brightness = (int)x;
+          g_devices[1].light_on = true;
           ble_queue_add(g_devices[1].cmd_brightness((int)x), 0);
-          id(cw_brt).publish_state((int)x);
-          id(cw_light_on).publish_state(true);
-          id(cw_light_sw).publish_state(true);
   - platform: template
     name: "Bedroom ColorTemp"
     id: cw_ct_n
@@ -567,7 +421,6 @@ number:
       - lambda: |-
           g_devices[1].color_temp = (int)x;
           ble_queue_add(g_devices[1].cmd_color_temp((int)x), 0);
-          id(cw_ct).publish_state((int)x);
   - platform: template
     name: "Bedroom Fan Speed"
     id: cw_spd_n
@@ -580,9 +433,6 @@ number:
           g_devices[1].fan_speed = (int)x;
           g_devices[1].fan_on = true;
           ble_queue_add(g_devices[1].cmd_fan_on(), 0);
-          id(cw_spd).publish_state((int)x);
-          id(cw_fan_on).publish_state(true);
-          id(cw_fan_sw).publish_state(true);
   - platform: template
     name: "Master Brightness"
     id: zzw_brt_n
@@ -594,10 +444,8 @@ number:
     set_action:
       - lambda: |-
           g_devices[2].brightness = (int)x;
+          g_devices[2].light_on = true;
           ble_queue_add(g_devices[2].cmd_brightness((int)x), 0);
-          id(zzw_brt).publish_state((int)x);
-          id(zzw_light_on).publish_state(true);
-          id(zzw_light_sw).publish_state(true);
   - platform: template
     name: "Master ColorTemp"
     id: zzw_ct_n
@@ -610,7 +458,6 @@ number:
       - lambda: |-
           g_devices[2].color_temp = (int)x;
           ble_queue_add(g_devices[2].cmd_color_temp((int)x), 0);
-          id(zzw_ct).publish_state((int)x);
   - platform: template
     name: "Master Fan Speed"
     id: zzw_spd_n
@@ -623,9 +470,6 @@ number:
           g_devices[2].fan_speed = (int)x;
           g_devices[2].fan_on = true;
           ble_queue_add(g_devices[2].cmd_fan_on(), 0);
-          id(zzw_spd).publish_state((int)x);
-          id(zzw_fan_on).publish_state(true);
-          id(zzw_fan_sw).publish_state(true);
   - platform: template
     name: "Living Room Brightness"
     id: kkt_brt_n
@@ -637,10 +481,8 @@ number:
     set_action:
       - lambda: |-
           g_devices[3].brightness = (int)x;
+          g_devices[3].light_on = true;
           ble_queue_add(g_devices[3].cmd_brightness((int)x), 0);
-          id(kkt_brt).publish_state((int)x);
-          id(kkt_light_on).publish_state(true);
-          id(kkt_light_sw).publish_state(true);
   - platform: template
     name: "Living Room ColorTemp"
     id: kkt_ct_n
@@ -653,7 +495,6 @@ number:
       - lambda: |-
           g_devices[3].color_temp = (int)x;
           ble_queue_add(g_devices[3].cmd_color_temp((int)x), 0);
-          id(kkt_ct).publish_state((int)x);
   - platform: template
     name: "Living Room Fan Speed"
     id: kkt_spd_n
@@ -666,11 +507,8 @@ number:
           g_devices[3].fan_speed = (int)x;
           g_devices[3].fan_on = true;
           ble_queue_add(g_devices[3].cmd_fan_on(), 0);
-          id(kkt_spd).publish_state((int)x);
-          id(kkt_fan_on).publish_state(true);
-          id(kkt_fan_sw).publish_state(true);
 
-# ===================== 传感器 =====================
+# ===================== 数值传感器 =====================
 sensor:
   - platform: template
     name: "Dining Brt"
