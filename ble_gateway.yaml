@@ -68,9 +68,10 @@ logger:
   baud_rate: 0
   level: INFO
 
+# WiFi 密码从 secrets.yaml 读取
 wifi:
-  ssid: "CC"
-  password: "chen1122"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   fast_connect: true
   power_save_mode: none
   ap:
@@ -131,9 +132,9 @@ mqtt:
   id: bemfa
   broker: bemfa.com
   port: 9501
-  username: "97109945d7e24559b3e4ca7a1f8ef160"
-  password: "97109945d7e24559b3e4ca7a1f8ef160"
-  client_id: "97109945d7e24559b3e4ca7a1f8ef160"
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  client_id: !secret mqtt_client_id
   keepalive: 30s
   discovery: false
   birth_message:
@@ -188,376 +189,15 @@ interval:
     then:
       - lambda: 'tick_heartbeat();'
 
-# ===================== 状态反馈传感器 =====================
-binary_sensor:
-  - platform: status
-    name: "Gateway Online"
-    device_class: connectivity
-  - platform: template
-    name: "餐厅灯光状态 CT_LightOn"
-    id: ct_light_on
-    device_class: light
-  - platform: template
-    name: "餐厅风扇状态 CT_FanOn"
-    id: ct_fan_on
-    device_class: running
-  - platform: template
-    name: "次卧灯光状态 CW_LightOn"
-    id: cw_light_on
-    device_class: light
-  - platform: template
-    name: "次卧风扇状态 CW_FanOn"
-    id: cw_fan_on
-    device_class: running
-  - platform: template
-    name: "主卧灯光状态 ZZW_LightOn"
-    id: zzw_light_on
-    device_class: light
-  - platform: template
-    name: "主卧风扇状态 ZZW_FanOn"
-    id: zzw_fan_on
-    device_class: running
-  - platform: template
-    name: "客厅灯光状态 KKT_LightOn"
-    id: kkt_light_on
-    device_class: light
-  - platform: template
-    name: "客厅风扇状态 KKT_FanOn"
-    id: kkt_fan_on
-    device_class: running
+# ===================== 使用 packages 引入四个房间的实体 =====================
+packages:
+  room_ct: !include templates/room.yaml {room_id: ct, room_name: "餐厅", device_index: 0}
+  room_cw: !include templates/room.yaml {room_id: cw, room_name: "次卧", device_index: 1}
+  room_zzw: !include templates/room.yaml {room_id: zzw, room_name: "主卧", device_index: 2}
+  room_kkt: !include templates/room.yaml {room_id: kkt, room_name: "客厅", device_index: 3}
 
-# ===================== 控制开关 =====================
-switch:
-  - platform: template
-    name: "餐厅灯光开关 CT_LightSw"
-    id: ct_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[0].light_on = true;
-          if (g_devices[0].brightness < 1) g_devices[0].brightness = 50;
-          ble_queue_add(g_devices[0].cmd_light_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[0].light_on = false;
-          ble_queue_add(g_devices[0].cmd_light_off(), 0);
-    lambda: 'return g_devices[0].light_on;'
-  - platform: template
-    name: "餐厅风扇开关 CT_FanSw"
-    id: ct_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[0].fan_on = true;
-          if (g_devices[0].fan_speed < 1) g_devices[0].fan_speed = 1;
-          ble_queue_add(g_devices[0].cmd_fan_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[0].fan_on = false;
-          ble_queue_add(g_devices[0].cmd_fan_off(), 0);
-    lambda: 'return g_devices[0].fan_on;'
-  - platform: template
-    name: "次卧灯光开关 CW_LightSw"
-    id: cw_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[1].light_on = true;
-          if (g_devices[1].brightness < 1) g_devices[1].brightness = 50;
-          ble_queue_add(g_devices[1].cmd_light_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[1].light_on = false;
-          ble_queue_add(g_devices[1].cmd_light_off(), 0);
-    lambda: 'return g_devices[1].light_on;'
-  - platform: template
-    name: "次卧风扇开关 CW_FanSw"
-    id: cw_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[1].fan_on = true;
-          if (g_devices[1].fan_speed < 1) g_devices[1].fan_speed = 1;
-          ble_queue_add(g_devices[1].cmd_fan_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[1].fan_on = false;
-          ble_queue_add(g_devices[1].cmd_fan_off(), 0);
-    lambda: 'return g_devices[1].fan_on;'
-  - platform: template
-    name: "主卧灯光开关 ZZW_LightSw"
-    id: zzw_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[2].light_on = true;
-          if (g_devices[2].brightness < 1) g_devices[2].brightness = 50;
-          ble_queue_add(g_devices[2].cmd_light_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[2].light_on = false;
-          ble_queue_add(g_devices[2].cmd_light_off(), 0);
-    lambda: 'return g_devices[2].light_on;'
-  - platform: template
-    name: "主卧风扇开关 ZZW_FanSw"
-    id: zzw_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[2].fan_on = true;
-          if (g_devices[2].fan_speed < 1) g_devices[2].fan_speed = 1;
-          ble_queue_add(g_devices[2].cmd_fan_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[2].fan_on = false;
-          ble_queue_add(g_devices[2].cmd_fan_off(), 0);
-    lambda: 'return g_devices[2].fan_on;'
-  - platform: template
-    name: "客厅灯光开关 KKT_LightSw"
-    id: kkt_light_sw
-    icon: mdi:ceiling-light
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[3].light_on = true;
-          if (g_devices[3].brightness < 1) g_devices[3].brightness = 50;
-          ble_queue_add(g_devices[3].cmd_light_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[3].light_on = false;
-          ble_queue_add(g_devices[3].cmd_light_off(), 0);
-    lambda: 'return g_devices[3].light_on;'
-  - platform: template
-    name: "客厅风扇开关 KKT_FanSw"
-    id: kkt_fan_sw
-    icon: mdi:fan
-    optimistic: false
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          g_devices[3].fan_on = true;
-          if (g_devices[3].fan_speed < 1) g_devices[3].fan_speed = 1;
-          ble_queue_add(g_devices[3].cmd_fan_on(), 0);
-    turn_off_action:
-      - lambda: |-
-          g_devices[3].fan_on = false;
-          ble_queue_add(g_devices[3].cmd_fan_off(), 0);
-    lambda: 'return g_devices[3].fan_on;'
-
-# ===================== 调节滑块 =====================
-number:
-  - platform: template
-    name: "餐厅亮度设置 CT_Brightness"
-    id: ct_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          g_devices[0].brightness = (int)x;
-          g_devices[0].light_on = true;
-          ble_queue_add(g_devices[0].cmd_brightness((int)x), 0);
-  - platform: template
-    name: "餐厅色温设置 CT_ColorTemp"
-    id: ct_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          g_devices[0].color_temp = (int)x;
-          ble_queue_add(g_devices[0].cmd_color_temp((int)x), 0);
-  - platform: template
-    name: "餐厅风速设置 CT_FanSpeed"
-    id: ct_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          g_devices[0].fan_speed = (int)x;
-          g_devices[0].fan_on = true;
-          ble_queue_add(g_devices[0].cmd_fan_on(), 0);
-  - platform: template
-    name: "次卧亮度设置 CW_Brightness"
-    id: cw_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          g_devices[1].brightness = (int)x;
-          g_devices[1].light_on = true;
-          ble_queue_add(g_devices[1].cmd_brightness((int)x), 0);
-  - platform: template
-    name: "次卧色温设置 CW_ColorTemp"
-    id: cw_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          g_devices[1].color_temp = (int)x;
-          ble_queue_add(g_devices[1].cmd_color_temp((int)x), 0);
-  - platform: template
-    name: "次卧风速设置 CW_FanSpeed"
-    id: cw_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          g_devices[1].fan_speed = (int)x;
-          g_devices[1].fan_on = true;
-          ble_queue_add(g_devices[1].cmd_fan_on(), 0);
-  - platform: template
-    name: "主卧亮度设置 ZZW_Brightness"
-    id: zzw_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          g_devices[2].brightness = (int)x;
-          g_devices[2].light_on = true;
-          ble_queue_add(g_devices[2].cmd_brightness((int)x), 0);
-  - platform: template
-    name: "主卧色温设置 ZZW_ColorTemp"
-    id: zzw_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          g_devices[2].color_temp = (int)x;
-          ble_queue_add(g_devices[2].cmd_color_temp((int)x), 0);
-  - platform: template
-    name: "主卧风速设置 ZZW_FanSpeed"
-    id: zzw_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          g_devices[2].fan_speed = (int)x;
-          g_devices[2].fan_on = true;
-          ble_queue_add(g_devices[2].cmd_fan_on(), 0);
-  - platform: template
-    name: "客厅亮度设置 KKT_Brightness"
-    id: kkt_brt_n
-    min_value: 1
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:brightness-percent
-    set_action:
-      - lambda: |-
-          g_devices[3].brightness = (int)x;
-          g_devices[3].light_on = true;
-          ble_queue_add(g_devices[3].cmd_brightness((int)x), 0);
-  - platform: template
-    name: "客厅色温设置 KKT_ColorTemp"
-    id: kkt_ct_n
-    min_value: 2700
-    max_value: 6500
-    step: 100
-    unit_of_measurement: "K"
-    icon: mdi:thermometer
-    set_action:
-      - lambda: |-
-          g_devices[3].color_temp = (int)x;
-          ble_queue_add(g_devices[3].cmd_color_temp((int)x), 0);
-  - platform: template
-    name: "客厅风速设置 KKT_FanSpeed"
-    id: kkt_spd_n
-    min_value: 1
-    max_value: 6
-    step: 1
-    icon: mdi:fan-speed-1
-    set_action:
-      - lambda: |-
-          g_devices[3].fan_speed = (int)x;
-          g_devices[3].fan_on = true;
-          ble_queue_add(g_devices[3].cmd_fan_on(), 0);
-
-# ===================== 数值传感器 =====================
+# ===================== 全局传感器 =====================
 sensor:
-  - platform: template
-    name: "餐厅亮度反馈 CT_Brt"
-    id: ct_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "餐厅色温反馈 CT_CT"
-    id: ct_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "餐厅风速反馈 CT_Spd"
-    id: ct_spd
-  - platform: template
-    name: "次卧亮度反馈 CW_Brt"
-    id: cw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "次卧色温反馈 CW_CT"
-    id: cw_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "次卧风速反馈 CW_Spd"
-    id: cw_spd
-  - platform: template
-    name: "主卧亮度反馈 ZZW_Brt"
-    id: zzw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "主卧色温反馈 ZZW_CT"
-    id: zzw_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "主卧风速反馈 ZZW_Spd"
-    id: zzw_spd
-  - platform: template
-    name: "客厅亮度反馈 KKT_Brt"
-    id: kkt_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "客厅色温反馈 KKT_CT"
-    id: kkt_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "客厅风速反馈 KKT_Spd"
-    id: kkt_spd
   - platform: uptime
     name: "Uptime"
     update_interval: 60s
@@ -578,6 +218,7 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 0
 
+# ===================== 文本传感器 =====================
 text_sensor:
   - platform: template
     name: "Build Time"
@@ -592,6 +233,7 @@ text_sensor:
     ssid:
       name: "ESP SSID"
 
+# ===================== 重启按钮 =====================
 button:
   - platform: restart
     name: "Restart GW"
