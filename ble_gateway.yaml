@@ -191,10 +191,10 @@ interval:
 
 # ===================== 使用 packages 引入四个房间的实体 =====================
 packages:
-  room_ct: !include templates/room.yaml {room_id: ct, room_name: "餐厅", device_index: 0}
-  room_cw: !include templates/room.yaml {room_id: cw, room_name: "次卧", device_index: 1}
-  room_zzw: !include templates/room.yaml {room_id: zzw, room_name: "主卧", device_index: 2}
-  room_kkt: !include templates/room.yaml {room_id: kkt, room_name: "客厅", device_index: 3}
+  room_ct: !include { file: templates/room.yaml, vars: { room_id: ct, room_name: "餐厅", device_index: 0 } }
+  room_cw: !include { file: templates/room.yaml, vars: { room_id: cw, room_name: "次卧", device_index: 1 } }
+  room_zzw: !include { file: templates/room.yaml, vars: { room_id: zzw, room_name: "主卧", device_index: 2 } }
+  room_kkt: !include { file: templates/room.yaml, vars: { room_id: kkt, room_name: "客厅", device_index: 3 } }
 
 # ===================== 全局传感器 =====================
 sensor:
