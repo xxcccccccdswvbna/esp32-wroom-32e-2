@@ -1,6 +1,4 @@
 # templates/room.yaml
-# 变量: ${room_id} (如 ct, cw), ${room_name} (中文), ${device_index} (0~3)
-
 binary_sensor:
   - platform: template
     name: "${room_name}灯光状态 ${room_id}_LightOn"
