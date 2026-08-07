@@ -4,7 +4,7 @@ substitutions:
   build_time: "Unknown"
 
 esphome:
-  name: ble-6
+  name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
   includes:
@@ -21,51 +21,30 @@ esphome:
           });
           register_entity_sync([](int idx, const MideaDevice& dev) {
               if (idx == 0) {
-                  id(ct_light_on).publish_state(dev.light_on);
-                  id(ct_fan_on).publish_state(dev.fan_on);
-                  id(ct_brt).publish_state(dev.brightness);
-                  id(ct_ct).publish_state(dev.color_temp);
-                  id(ct_spd).publish_state(dev.fan_speed);
-                  id(ct_brt_n).publish_state(dev.brightness);
-                  id(ct_ct_n).publish_state(dev.color_temp);
-                  id(ct_spd_n).publish_state(dev.fan_speed);
-                  id(ct_light_sw).publish_state(dev.light_on);
-                  id(ct_fan_sw).publish_state(dev.fan_on);
+                  id(ct_light_on).publish_state(dev.light_on); id(ct_fan_on).publish_state(dev.fan_on);
+                  id(ct_brt).publish_state(dev.brightness); id(ct_ct).publish_state(dev.color_temp); id(ct_spd).publish_state(dev.fan_speed);
+                  id(ct_brt_n).publish_state(dev.brightness); id(ct_ct_n).publish_state(dev.color_temp); id(ct_spd_n).publish_state(dev.fan_speed);
+                  id(ct_light_sw).publish_state(dev.light_on); id(ct_fan_sw).publish_state(dev.fan_on);
               } else if (idx == 1) {
-                  id(cw_light_on).publish_state(dev.light_on);
-                  id(cw_fan_on).publish_state(dev.fan_on);
-                  id(cw_brt).publish_state(dev.brightness);
-                  id(cw_ct).publish_state(dev.color_temp);
-                  id(cw_spd).publish_state(dev.fan_speed);
-                  id(cw_brt_n).publish_state(dev.brightness);
-                  id(cw_ct_n).publish_state(dev.color_temp);
-                  id(cw_spd_n).publish_state(dev.fan_speed);
-                  id(cw_light_sw).publish_state(dev.light_on);
-                  id(cw_fan_sw).publish_state(dev.fan_on);
+                  id(cw_light_on).publish_state(dev.light_on); id(cw_fan_on).publish_state(dev.fan_on);
+                  id(cw_brt).publish_state(dev.brightness); id(cw_ct).publish_state(dev.color_temp); id(cw_spd).publish_state(dev.fan_speed);
+                  id(cw_brt_n).publish_state(dev.brightness); id(cw_ct_n).publish_state(dev.color_temp); id(cw_spd_n).publish_state(dev.fan_speed);
+                  id(cw_light_sw).publish_state(dev.light_on); id(cw_fan_sw).publish_state(dev.fan_on);
               } else if (idx == 2) {
-                  id(zzw_light_on).publish_state(dev.light_on);
-                  id(zzw_fan_on).publish_state(dev.fan_on);
-                  id(zzw_brt).publish_state(dev.brightness);
-                  id(zzw_ct).publish_state(dev.color_temp);
-                  id(zzw_spd).publish_state(dev.fan_speed);
-                  id(zzw_brt_n).publish_state(dev.brightness);
-                  id(zzw_ct_n).publish_state(dev.color_temp);
-                  id(zzw_spd_n).publish_state(dev.fan_speed);
-                  id(zzw_light_sw).publish_state(dev.light_on);
-                  id(zzw_fan_sw).publish_state(dev.fan_on);
+                  id(zzw_light_on).publish_state(dev.light_on); id(zzw_fan_on).publish_state(dev.fan_on);
+                  id(zzw_brt).publish_state(dev.brightness); id(zzw_ct).publish_state(dev.color_temp); id(zzw_spd).publish_state(dev.fan_speed);
+                  id(zzw_brt_n).publish_state(dev.brightness); id(zzw_ct_n).publish_state(dev.color_temp); id(zzw_spd_n).publish_state(dev.fan_speed);
+                  id(zzw_light_sw).publish_state(dev.light_on); id(zzw_fan_sw).publish_state(dev.fan_on);
               } else if (idx == 3) {
-                  id(kkt_light_on).publish_state(dev.light_on);
-                  id(kkt_fan_on).publish_state(dev.fan_on);
-                  id(kkt_brt).publish_state(dev.brightness);
-                  id(kkt_ct).publish_state(dev.color_temp);
-                  id(kkt_spd).publish_state(dev.fan_speed);
-                  id(kkt_brt_n).publish_state(dev.brightness);
-                  id(kkt_ct_n).publish_state(dev.color_temp);
-                  id(kkt_spd_n).publish_state(dev.fan_speed);
-                  id(kkt_light_sw).publish_state(dev.light_on);
-                  id(kkt_fan_sw).publish_state(dev.fan_on);
+                  id(kkt_light_on).publish_state(dev.light_on); id(kkt_fan_on).publish_state(dev.fan_on);
+                  id(kkt_brt).publish_state(dev.brightness); id(kkt_ct).publish_state(dev.color_temp); id(kkt_spd).publish_state(dev.fan_speed);
+                  id(kkt_brt_n).publish_state(dev.brightness); id(kkt_ct_n).publish_state(dev.color_temp); id(kkt_spd_n).publish_state(dev.fan_speed);
+                  id(kkt_light_sw).publish_state(dev.light_on); id(kkt_fan_sw).publish_state(dev.fan_on);
               }
           });
+      # 开机时点亮蓝灯和白灯
+      - light.turn_on: blue_led
+      - light.turn_on: white_led
 
 esp32:
   board: esp32dev
@@ -95,6 +74,7 @@ web_server:
   port: 80
 ota:
   - platform: esphome
+
 api:
   reboot_timeout: 0s
   services:
@@ -103,6 +83,14 @@ api:
         hex_data: string
       then:
         - lambda: 'id(tx).send_hex(hex_data);'
+  # 连上 Home Assistant 后，停止闪烁并关灯
+  on_client_connected:
+    - script.stop: offline_flash
+    - light.turn_off: white_led
+    - light.turn_off: blue_led
+  # 断开 Home Assistant 后，执行白灯闪烁脚本
+  on_client_disconnected:
+    - script.execute: offline_flash
 
 external_components:
   - source:
@@ -142,6 +130,18 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+
+# ===================== 离线闪烁脚本 =====================
+script:
+  - id: offline_flash
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'
+          then:
+            - light.toggle: white_led
+            - delay: 500ms
 
 # ===================== 巴法云 MQTT =====================
 mqtt:
@@ -208,17 +208,17 @@ interval:
     then:
       - lambda: 'tick_heartbeat();'
 
-# ===================== LED 输出 =====================
+# ===================== LED 输出 (修正引脚为 27/26) =====================
 output:
   - platform: gpio
     id: blue_led_out
     pin:
-      number: GPIO2
+      number: GPIO27
       inverted: true
   - platform: gpio
     id: white_led_out
     pin:
-      number: GPIO4
+      number: GPIO26
       inverted: true
 
 # ===================== LED 灯光 =====================
@@ -324,21 +324,9 @@ binary_sensor:
     filters: [delayed_on: 20ms, delayed_off: 20ms]
     on_multi_click:
       - timing: [ON for at least 1.5s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key2", mode: "long" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key2", mode: "single" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }]
   - platform: gpio
     id: key3
     name: KEY3
@@ -346,21 +334,9 @@ binary_sensor:
     filters: [delayed_on: 20ms, delayed_off: 20ms]
     on_multi_click:
       - timing: [ON for at least 1.5s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key3", mode: "long" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key3", mode: "single" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
   - platform: gpio
     id: key4
     name: KEY4
@@ -368,21 +344,9 @@ binary_sensor:
     filters: [delayed_on: 20ms, delayed_off: 20ms]
     on_multi_click:
       - timing: [ON for at least 1.5s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key4", mode: "long" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then:
-          - light.turn_on: blue_led
-          - delay: 200ms
-          - light.turn_off: blue_led
-          - homeassistant.event:
-              event: esphome.gateway_key
-              data: { key: "key4", mode: "single" }
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
 
 # ===================== 开关 =====================
 switch:
