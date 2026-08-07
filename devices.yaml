@@ -10,13 +10,3 @@ devices:
     mac: "F0CF2D700000"
     light_topic: "cwlight002"
     fan_topic: "cwfan003"
-  - id: zzw
-    name: "主卧"
-    mac: "922635700000"
-    light_topic: "zzwlight002"
-    fan_topic: "zzwfan003"
-  - id: kkt
-    name: "客厅"
-    mac: "CDAB38700000"
-    light_topic: "kktlight002"
-    fan_topic: "kktfan003"
