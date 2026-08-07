@@ -212,10 +212,14 @@ interval:
 output:
   - platform: gpio
     id: blue_led_out
-    pin: GPIO2
+    pin:
+      number: GPIO2
+      inverted: true
   - platform: gpio
     id: white_led_out
-    pin: GPIO4
+    pin:
+      number: GPIO4
+      inverted: true
 
 # ===================== LED 灯光 =====================
 light:
