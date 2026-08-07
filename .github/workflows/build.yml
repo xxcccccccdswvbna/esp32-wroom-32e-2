@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [4anjian-1]
+    branches: [jingjian]
   workflow_dispatch:
 
 permissions:
