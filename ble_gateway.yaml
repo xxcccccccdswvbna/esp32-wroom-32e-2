@@ -1,6 +1,6 @@
 # ===================== 项目配置 =====================
 substitutions:
-  project_name: "cct1"
+  project_name: "yyy1"
   build_time: "Unknown"
 
 esphome:
