@@ -194,42 +194,42 @@ binary_sensor:
     name: "Gateway Online"
     device_class: connectivity
   - platform: template
-    name: "餐厅 Light On"
+    name: "餐厅灯光状态 CT_LightOn"
     id: ct_light_on
     device_class: light
   - platform: template
-    name: "餐厅 Fan On"
+    name: "餐厅风扇状态 CT_FanOn"
     id: ct_fan_on
     device_class: running
   - platform: template
-    name: "次卧 Light On"
+    name: "次卧灯光状态 CW_LightOn"
     id: cw_light_on
     device_class: light
   - platform: template
-    name: "次卧 Fan On"
+    name: "次卧风扇状态 CW_FanOn"
     id: cw_fan_on
     device_class: running
   - platform: template
-    name: "主卧 Light On"
+    name: "主卧灯光状态 ZZW_LightOn"
     id: zzw_light_on
     device_class: light
   - platform: template
-    name: "主卧 Fan On"
+    name: "主卧风扇状态 ZZW_FanOn"
     id: zzw_fan_on
     device_class: running
   - platform: template
-    name: "客厅 Light On"
+    name: "客厅灯光状态 KKT_LightOn"
     id: kkt_light_on
     device_class: light
   - platform: template
-    name: "客厅 Fan On"
+    name: "客厅风扇状态 KKT_FanOn"
     id: kkt_fan_on
     device_class: running
 
 # ===================== 控制开关 =====================
 switch:
   - platform: template
-    name: "餐厅 Light"
+    name: "餐厅灯光开关 CT_LightSw"
     id: ct_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -245,7 +245,7 @@ switch:
           ble_queue_add(g_devices[0].cmd_light_off(), 0);
     lambda: 'return g_devices[0].light_on;'
   - platform: template
-    name: "餐厅 Fan"
+    name: "餐厅风扇开关 CT_FanSw"
     id: ct_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -261,7 +261,7 @@ switch:
           ble_queue_add(g_devices[0].cmd_fan_off(), 0);
     lambda: 'return g_devices[0].fan_on;'
   - platform: template
-    name: "次卧 Light"
+    name: "次卧灯光开关 CW_LightSw"
     id: cw_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -277,7 +277,7 @@ switch:
           ble_queue_add(g_devices[1].cmd_light_off(), 0);
     lambda: 'return g_devices[1].light_on;'
   - platform: template
-    name: "次卧 Fan"
+    name: "次卧风扇开关 CW_FanSw"
     id: cw_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -293,7 +293,7 @@ switch:
           ble_queue_add(g_devices[1].cmd_fan_off(), 0);
     lambda: 'return g_devices[1].fan_on;'
   - platform: template
-    name: "主卧 Light"
+    name: "主卧灯光开关 ZZW_LightSw"
     id: zzw_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -309,7 +309,7 @@ switch:
           ble_queue_add(g_devices[2].cmd_light_off(), 0);
     lambda: 'return g_devices[2].light_on;'
   - platform: template
-    name: "主卧 Fan"
+    name: "主卧风扇开关 ZZW_FanSw"
     id: zzw_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -325,7 +325,7 @@ switch:
           ble_queue_add(g_devices[2].cmd_fan_off(), 0);
     lambda: 'return g_devices[2].fan_on;'
   - platform: template
-    name: "客厅 Light"
+    name: "客厅灯光开关 KKT_LightSw"
     id: kkt_light_sw
     icon: mdi:ceiling-light
     optimistic: false
@@ -341,7 +341,7 @@ switch:
           ble_queue_add(g_devices[3].cmd_light_off(), 0);
     lambda: 'return g_devices[3].light_on;'
   - platform: template
-    name: "客厅 Fan"
+    name: "客厅风扇开关 KKT_FanSw"
     id: kkt_fan_sw
     icon: mdi:fan
     optimistic: false
@@ -360,7 +360,7 @@ switch:
 # ===================== 调节滑块 =====================
 number:
   - platform: template
-    name: "餐厅 Brightness"
+    name: "餐厅亮度设置 CT_Brightness"
     id: ct_brt_n
     min_value: 1
     max_value: 100
@@ -373,7 +373,7 @@ number:
           g_devices[0].light_on = true;
           ble_queue_add(g_devices[0].cmd_brightness((int)x), 0);
   - platform: template
-    name: "餐厅 ColorTemp"
+    name: "餐厅色温设置 CT_ColorTemp"
     id: ct_ct_n
     min_value: 2700
     max_value: 6500
@@ -385,7 +385,7 @@ number:
           g_devices[0].color_temp = (int)x;
           ble_queue_add(g_devices[0].cmd_color_temp((int)x), 0);
   - platform: template
-    name: "餐厅 Fan Speed"
+    name: "餐厅风速设置 CT_FanSpeed"
     id: ct_spd_n
     min_value: 1
     max_value: 6
@@ -397,7 +397,7 @@ number:
           g_devices[0].fan_on = true;
           ble_queue_add(g_devices[0].cmd_fan_on(), 0);
   - platform: template
-    name: "次卧 Brightness"
+    name: "次卧亮度设置 CW_Brightness"
     id: cw_brt_n
     min_value: 1
     max_value: 100
@@ -410,7 +410,7 @@ number:
           g_devices[1].light_on = true;
           ble_queue_add(g_devices[1].cmd_brightness((int)x), 0);
   - platform: template
-    name: "次卧 ColorTemp"
+    name: "次卧色温设置 CW_ColorTemp"
     id: cw_ct_n
     min_value: 2700
     max_value: 6500
@@ -422,7 +422,7 @@ number:
           g_devices[1].color_temp = (int)x;
           ble_queue_add(g_devices[1].cmd_color_temp((int)x), 0);
   - platform: template
-    name: "次卧 Fan Speed"
+    name: "次卧风速设置 CW_FanSpeed"
     id: cw_spd_n
     min_value: 1
     max_value: 6
@@ -434,7 +434,7 @@ number:
           g_devices[1].fan_on = true;
           ble_queue_add(g_devices[1].cmd_fan_on(), 0);
   - platform: template
-    name: "主卧 Brightness"
+    name: "主卧亮度设置 ZZW_Brightness"
     id: zzw_brt_n
     min_value: 1
     max_value: 100
@@ -447,7 +447,7 @@ number:
           g_devices[2].light_on = true;
           ble_queue_add(g_devices[2].cmd_brightness((int)x), 0);
   - platform: template
-    name: "主卧 ColorTemp"
+    name: "主卧色温设置 ZZW_ColorTemp"
     id: zzw_ct_n
     min_value: 2700
     max_value: 6500
@@ -459,7 +459,7 @@ number:
           g_devices[2].color_temp = (int)x;
           ble_queue_add(g_devices[2].cmd_color_temp((int)x), 0);
   - platform: template
-    name: "主卧 Fan Speed"
+    name: "主卧风速设置 ZZW_FanSpeed"
     id: zzw_spd_n
     min_value: 1
     max_value: 6
@@ -471,7 +471,7 @@ number:
           g_devices[2].fan_on = true;
           ble_queue_add(g_devices[2].cmd_fan_on(), 0);
   - platform: template
-    name: "客厅 Brightness"
+    name: "客厅亮度设置 KKT_Brightness"
     id: kkt_brt_n
     min_value: 1
     max_value: 100
@@ -484,7 +484,7 @@ number:
           g_devices[3].light_on = true;
           ble_queue_add(g_devices[3].cmd_brightness((int)x), 0);
   - platform: template
-    name: "客厅 ColorTemp"
+    name: "客厅色温设置 KKT_ColorTemp"
     id: kkt_ct_n
     min_value: 2700
     max_value: 6500
@@ -496,7 +496,7 @@ number:
           g_devices[3].color_temp = (int)x;
           ble_queue_add(g_devices[3].cmd_color_temp((int)x), 0);
   - platform: template
-    name: "客厅 Fan Speed"
+    name: "客厅风速设置 KKT_FanSpeed"
     id: kkt_spd_n
     min_value: 1
     max_value: 6
@@ -511,52 +511,52 @@ number:
 # ===================== 数值传感器 =====================
 sensor:
   - platform: template
-    name: "餐厅 Brt"
+    name: "餐厅亮度反馈 CT_Brt"
     id: ct_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "餐厅 CT"
+    name: "餐厅色温反馈 CT_CT"
     id: ct_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "餐厅 Spd"
+    name: "餐厅风速反馈 CT_Spd"
     id: ct_spd
   - platform: template
-    name: "次卧 Brt"
+    name: "次卧亮度反馈 CW_Brt"
     id: cw_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "次卧 CT"
+    name: "次卧色温反馈 CW_CT"
     id: cw_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "次卧 Spd"
+    name: "次卧风速反馈 CW_Spd"
     id: cw_spd
   - platform: template
-    name: "主卧 Brt"
+    name: "主卧亮度反馈 ZZW_Brt"
     id: zzw_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "主卧 CT"
+    name: "主卧色温反馈 ZZW_CT"
     id: zzw_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "主卧 Spd"
+    name: "主卧风速反馈 ZZW_Spd"
     id: zzw_spd
   - platform: template
-    name: "客厅 Brt"
+    name: "客厅亮度反馈 KKT_Brt"
     id: kkt_brt
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    name: "客厅 CT"
+    name: "客厅色温反馈 KKT_CT"
     id: kkt_ct
     unit_of_measurement: "K"
   - platform: template
-    name: "客厅 Spd"
+    name: "客厅风速反馈 KKT_Spd"
     id: kkt_spd
   - platform: uptime
     name: "Uptime"
