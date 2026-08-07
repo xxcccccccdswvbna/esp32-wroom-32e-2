@@ -1,0 +1,102 @@
+# templates/room.yaml
+# 变量: ${room_id} (如 ct, cw), ${room_name} (中文), ${device_index} (0~3)
+
+binary_sensor:
+  - platform: template
+    name: "${room_name}灯光状态 ${room_id}_LightOn"
+    id: ${room_id}_light_on
+    device_class: light
+  - platform: template
+    name: "${room_name}风扇状态 ${room_id}_FanOn"
+    id: ${room_id}_fan_on
+    device_class: running
+
+switch:
+  - platform: template
+    name: "${room_name}灯光开关 ${room_id}_LightSw"
+    id: ${room_id}_light_sw
+    icon: mdi:ceiling-light
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          g_devices[${device_index}].light_on = true;
+          if (g_devices[${device_index}].brightness < 1) g_devices[${device_index}].brightness = 50;
+          ble_queue_add(g_devices[${device_index}].cmd_light_on(), 0);
+    turn_off_action:
+      - lambda: |-
+          g_devices[${device_index}].light_on = false;
+          ble_queue_add(g_devices[${device_index}].cmd_light_off(), 0);
+    lambda: 'return g_devices[${device_index}].light_on;'
+
+  - platform: template
+    name: "${room_name}风扇开关 ${room_id}_FanSw"
+    id: ${room_id}_fan_sw
+    icon: mdi:fan
+    optimistic: false
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          g_devices[${device_index}].fan_on = true;
+          if (g_devices[${device_index}].fan_speed < 1) g_devices[${device_index}].fan_speed = 1;
+          ble_queue_add(g_devices[${device_index}].cmd_fan_on(), 0);
+    turn_off_action:
+      - lambda: |-
+          g_devices[${device_index}].fan_on = false;
+          ble_queue_add(g_devices[${device_index}].cmd_fan_off(), 0);
+    lambda: 'return g_devices[${device_index}].fan_on;'
+
+number:
+  - platform: template
+    name: "${room_name}亮度设置 ${room_id}_Brightness"
+    id: ${room_id}_brt_n
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    set_action:
+      - lambda: |-
+          g_devices[${device_index}].brightness = (int)x;
+          g_devices[${device_index}].light_on = true;
+          ble_queue_add(g_devices[${device_index}].cmd_brightness((int)x), 0);
+
+  - platform: template
+    name: "${room_name}色温设置 ${room_id}_ColorTemp"
+    id: ${room_id}_ct_n
+    min_value: 2700
+    max_value: 6500
+    step: 100
+    unit_of_measurement: "K"
+    icon: mdi:thermometer
+    set_action:
+      - lambda: |-
+          g_devices[${device_index}].color_temp = (int)x;
+          ble_queue_add(g_devices[${device_index}].cmd_color_temp((int)x), 0);
+
+  - platform: template
+    name: "${room_name}风速设置 ${room_id}_FanSpeed"
+    id: ${room_id}_spd_n
+    min_value: 1
+    max_value: 6
+    step: 1
+    icon: mdi:fan-speed-1
+    set_action:
+      - lambda: |-
+          g_devices[${device_index}].fan_speed = (int)x;
+          g_devices[${device_index}].fan_on = true;
+          ble_queue_add(g_devices[${device_index}].cmd_fan_on(), 0);
+
+sensor:
+  - platform: template
+    name: "${room_name}亮度反馈 ${room_id}_Brt"
+    id: ${room_id}_brt
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    name: "${room_name}色温反馈 ${room_id}_CT"
+    id: ${room_id}_ct
+    unit_of_measurement: "K"
+  - platform: template
+    name: "${room_name}风速反馈 ${room_id}_Spd"
+    id: ${room_id}_spd
