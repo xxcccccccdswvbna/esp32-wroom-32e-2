@@ -1,16 +1,16 @@
 # ===================== 项目配置 & MAC 地址管理 =====================
 substitutions:
-  project_name: "vvt1"
+  project_name: "byy1"
   build_time: "Unknown"
   
-  # ===== 更改设备 MAC 地址请修改这里 (12位纯字母数字) =====
+  # ===== 更改设备 MAC 地址请修改这里 =====
   mac_ct: "488027700000"   # 餐厅
   mac_cw: "F0CF2D700000"   # 次卧
   mac_zzw: "922635700000"  # 主卧
   mac_kkt: "CDAB38700000"  # 客厅
 
 esphome:
-  name: ble-3
+  name: ble-2
   friendly_name: "${project_name}"
   comment: "${project_name} - Build: ${build_time}"
   includes:
@@ -19,38 +19,25 @@ esphome:
     priority: 600
     then:
       - lambda: |-
-          // 1. 动态注入 MAC 地址
           set_device_mac(0, "${mac_ct}");
           set_device_mac(1, "${mac_cw}");
           set_device_mac(2, "${mac_zzw}");
           set_device_mac(3, "${mac_kkt}");
-          
-          // 2. 绑定底层函数
           ble_set_send_function([](const std::string& hex) { id(tx).send_hex(hex); });
           mqtt_set_publish_function([](const char* topic, const char* payload) { id(bemfa).publish(topic, payload); });
-          
-          // 3. 注册 HA 实体同步回调
           register_entity_sync([](int idx, const MideaDevice& dev) {
               if (idx == 0) {
-                  id(ct_light_on).publish_state(dev.light_on); id(ct_fan_on).publish_state(dev.fan_on);
-                  id(ct_brt).publish_state(dev.brightness); id(ct_ct).publish_state(dev.color_temp); id(ct_spd).publish_state(dev.fan_speed);
-                  id(ct_brt_n).publish_state(dev.brightness); id(ct_ct_n).publish_state(dev.color_temp); id(ct_spd_n).publish_state(dev.fan_speed);
                   id(ct_light_sw).publish_state(dev.light_on); id(ct_fan_sw).publish_state(dev.fan_on);
+                  id(ct_brt_n).publish_state(dev.brightness); id(ct_ct_n).publish_state(dev.color_temp); id(ct_spd_n).publish_state(dev.fan_speed);
               } else if (idx == 1) {
-                  id(cw_light_on).publish_state(dev.light_on); id(cw_fan_on).publish_state(dev.fan_on);
-                  id(cw_brt).publish_state(dev.brightness); id(cw_ct).publish_state(dev.color_temp); id(cw_spd).publish_state(dev.fan_speed);
-                  id(cw_brt_n).publish_state(dev.brightness); id(cw_ct_n).publish_state(dev.color_temp); id(cw_spd_n).publish_state(dev.fan_speed);
                   id(cw_light_sw).publish_state(dev.light_on); id(cw_fan_sw).publish_state(dev.fan_on);
+                  id(cw_brt_n).publish_state(dev.brightness); id(cw_ct_n).publish_state(dev.color_temp); id(cw_spd_n).publish_state(dev.fan_speed);
               } else if (idx == 2) {
-                  id(zzw_light_on).publish_state(dev.light_on); id(zzw_fan_on).publish_state(dev.fan_on);
-                  id(zzw_brt).publish_state(dev.brightness); id(zzw_ct).publish_state(dev.color_temp); id(zzw_spd).publish_state(dev.fan_speed);
-                  id(zzw_brt_n).publish_state(dev.brightness); id(zzw_ct_n).publish_state(dev.color_temp); id(zzw_spd_n).publish_state(dev.fan_speed);
                   id(zzw_light_sw).publish_state(dev.light_on); id(zzw_fan_sw).publish_state(dev.fan_on);
+                  id(zzw_brt_n).publish_state(dev.brightness); id(zzw_ct_n).publish_state(dev.color_temp); id(zzw_spd_n).publish_state(dev.fan_speed);
               } else if (idx == 3) {
-                  id(kkt_light_on).publish_state(dev.light_on); id(kkt_fan_on).publish_state(dev.fan_on);
-                  id(kkt_brt).publish_state(dev.brightness); id(kkt_ct).publish_state(dev.color_temp); id(kkt_spd).publish_state(dev.fan_speed);
-                  id(kkt_brt_n).publish_state(dev.brightness); id(kkt_ct_n).publish_state(dev.color_temp); id(kkt_spd_n).publish_state(dev.fan_speed);
                   id(kkt_light_sw).publish_state(dev.light_on); id(kkt_fan_sw).publish_state(dev.fan_on);
+                  id(kkt_brt_n).publish_state(dev.brightness); id(kkt_ct_n).publish_state(dev.color_temp); id(kkt_spd_n).publish_state(dev.fan_speed);
               }
           });
 
@@ -106,25 +93,6 @@ esp32_ble:
 bluetooth_proxy:
   active: true
   cache_services: true
-
-# ===================== 全局变量 =====================
-globals:
-  - id: ct_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
-  - id: cw_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
-  - id: zzw_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
-  - id: kkt_current_ct_kelvin
-    type: int
-    restore_value: no
-    initial_value: '4600'
 
 # ===================== 巴法云 MQTT =====================
 mqtt:
@@ -187,44 +155,6 @@ interval:
   - interval: 60s
     then:
       - lambda: 'tick_heartbeat();'
-
-# ===================== 状态反馈传感器 =====================
-binary_sensor:
-  - platform: status
-    name: "Gateway Online"
-    device_class: connectivity
-  - platform: template
-    name: "Dining Light On"
-    id: ct_light_on
-    device_class: light
-  - platform: template
-    name: "Dining Fan On"
-    id: ct_fan_on
-    device_class: running
-  - platform: template
-    name: "Bedroom Light On"
-    id: cw_light_on
-    device_class: light
-  - platform: template
-    name: "Bedroom Fan On"
-    id: cw_fan_on
-    device_class: running
-  - platform: template
-    name: "Master Light On"
-    id: zzw_light_on
-    device_class: light
-  - platform: template
-    name: "Master Fan On"
-    id: zzw_fan_on
-    device_class: running
-  - platform: template
-    name: "Living Room Light On"
-    id: kkt_light_on
-    device_class: light
-  - platform: template
-    name: "Living Room Fan On"
-    id: kkt_fan_on
-    device_class: running
 
 # ===================== 控制开关 =====================
 switch:
@@ -508,56 +438,8 @@ number:
           g_devices[3].fan_on = true;
           ble_queue_add(g_devices[3].cmd_fan_on(), 0);
 
-# ===================== 数值传感器 =====================
+# ===================== 系统传感器 =====================
 sensor:
-  - platform: template
-    name: "Dining Brt"
-    id: ct_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Dining CT"
-    id: ct_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Dining Spd"
-    id: ct_spd
-  - platform: template
-    name: "Bedroom Brt"
-    id: cw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Bedroom CT"
-    id: cw_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Bedroom Spd"
-    id: cw_spd
-  - platform: template
-    name: "Master Brt"
-    id: zzw_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Master CT"
-    id: zzw_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Master Spd"
-    id: zzw_spd
-  - platform: template
-    name: "Living Room Brt"
-    id: kkt_brt
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    name: "Living Room CT"
-    id: kkt_ct
-    unit_of_measurement: "K"
-  - platform: template
-    name: "Living Room Spd"
-    id: kkt_spd
   - platform: uptime
     name: "Uptime"
     update_interval: 60s
@@ -577,6 +459,11 @@ sensor:
       - lambda: return min(max(2*(x+100.0),0.0),100.0);
     unit_of_measurement: "%"
     accuracy_decimals: 0
+
+binary_sensor:
+  - platform: status
+    name: "Gateway Online"
+    device_class: connectivity
 
 text_sensor:
   - platform: template
