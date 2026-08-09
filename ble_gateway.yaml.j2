@@ -1,6 +1,6 @@
 # ===================== 项目配置 & MAC 地址管理 =====================
 substitutions:
-  project_name: "vvt1"
+  project_name: "cct"
   build_time: "Unknown"
   {% for dev in devices %}
   mac_{{ dev.id }}: "{{ dev.mac }}"
@@ -39,9 +39,12 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
+      # 🚨 核心：强制单核模式，防止双核初始化导致崩溃
       CONFIG_FREERTOS_UNICORE: y
-      CONFIG_BT_ENABLED: y
-      CONFIG_BT_BLE_ENABLED: y
+    # 👇 新增：忽略 eFuse MAC 地址 CRC 校验错误
+    advanced:
+      ignore_efuse_mac_crc: true
+      ignore_efuse_custom_mac: true
 
 logger:
   baud_rate: 0
