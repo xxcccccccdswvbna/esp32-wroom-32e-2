@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <functional>
-#include <esphome/core/hal.h>
+#include <Arduino.h> // 确保 Arduino 框架下 millis() 可用
 
 // ================================================================
 //                    实体同步回调
@@ -135,17 +135,30 @@ static std::function<void(const char*, const char*)> g_mqtt_pub_fn = nullptr;
 
 static void ble_set_send_function(std::function<void(const std::string&)> fn) { g_ble_send_fn = fn; }
 static void mqtt_set_publish_function(std::function<void(const char*, const char*)> fn) { g_mqtt_pub_fn = fn; }
-static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) { g_ble_queue.push_back({hex, esphome::millis() + delay_ms}); }
-static void ble_queue_process() { if (!g_ble_queue.empty() && esphome::millis() >= g_ble_queue[0].send_at && g_ble_send_fn) { g_ble_send_fn(g_ble_queue[0].hex); g_ble_queue.erase(g_ble_queue.begin()); } }
 
+// 👇 修复：使用 millis() 并显式构造 BleQueueItem
+static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) { 
+    g_ble_queue.push_back(BleQueueItem{hex, millis() + delay_ms}); 
+}
+
+// 👇 修复：使用 millis()
+static void ble_queue_process() { 
+    if (!g_ble_queue.empty() && millis() >= g_ble_queue[0].send_at && g_ble_send_fn) { 
+        g_ble_send_fn(g_ble_queue[0].hex); 
+        g_ble_queue.erase(g_ble_queue.begin()); 
+    } 
+}
+
+// 👇 修复：使用 millis()
 static void device_publish_bemfa(MideaDevice& dev) {
-    if (!g_mqtt_pub_fn || esphome::millis() - dev.last_publish_ms < 200) return;
-    dev.last_publish_ms = esphome::millis();
+    if (!g_mqtt_pub_fn || millis() - dev.last_publish_ms < 200) return;
+    dev.last_publish_ms = millis();
     std::string lt = std::string(dev.light_topic) + "/up";
     g_mqtt_pub_fn(lt.c_str(), dev.light_on ? ("on#" + std::to_string(dev.brightness) + "#" + std::to_string(dev.color_temp)).c_str() : "off");
     std::string ft = std::string(dev.fan_topic) + "/up";
     g_mqtt_pub_fn(ft.c_str(), dev.fan_on ? ("on#" + std::to_string(dev.fan_speed)).c_str() : "off");
 }
+
 static void publish_all_devices() { for (int i = 0; i < DEVICE_COUNT; i++) { g_devices[i].last_publish_ms = 0; device_publish_bemfa(g_devices[i]); } }
 
 static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
@@ -165,6 +178,7 @@ static int parse_ble_device(const uint8_t* raw, size_t sz, int idx) {
     }
     return -1;
 }
+
 static int parse_ble_advertisement(const std::vector<uint8_t>& raw) { if (raw.size() < 20) return -1; for (int i = 0; i < DEVICE_COUNT; i++) { int idx = parse_ble_device(raw.data(), raw.size(), i); if (idx >= 0) return idx; } return -1; }
 
 static void handle_light_mqtt(int idx, const std::string& p) {
@@ -174,6 +188,7 @@ static void handle_light_mqtt(int idx, const std::string& p) {
     else if (p.find("on#") == 0) { std::string r = p.substr(3); size_t pos = r.find('#'); dev.brightness = std::stoi(r.substr(0, pos)); if(pos!=std::string::npos){int v=std::stoi(r.substr(pos+1));if(v>=2700&&v<=6500)dev.color_temp=v;} dev.light_on = true; ble_queue_add(dev.cmd_light_on()); }
     device_publish_bemfa(dev); if (g_sync_callback) g_sync_callback(idx, dev);
 }
+
 static void handle_fan_mqtt(int idx, const std::string& p) {
     if (idx < 0 || idx >= DEVICE_COUNT) return; MideaDevice& dev = g_devices[idx];
     if (p == "on") { dev.fan_on = true; if(dev.fan_speed<1)dev.fan_speed=1; ble_queue_add(dev.cmd_fan_on()); }
@@ -183,4 +198,11 @@ static void handle_fan_mqtt(int idx, const std::string& p) {
 }
 
 static void tick_ble_queue() { ble_queue_process(); }
-static void tick_heartbeat() { static uint32_t last_hb = 0; if (esphome::millis() - last_hb < 60000) return; last_hb = esphome::millis(); publish_all_devices(); }
+
+// 👇 修复：使用 millis()
+static void tick_heartbeat() { 
+    static uint32_t last_hb = 0; 
+    if (millis() - last_hb < 60000) return; 
+    last_hb = millis(); 
+    publish_all_devices(); 
+}
