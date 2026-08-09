@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [zidonghua-1]
+    branches: [zhuamn-1]
   workflow_dispatch:
 
 permissions:
