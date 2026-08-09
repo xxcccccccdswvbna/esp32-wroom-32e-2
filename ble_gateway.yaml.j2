@@ -37,7 +37,7 @@ esp32:
   board: esp32dev
   flash_size: 4MB
   framework:
-    type: esp-idf
+    type: arduino
     sdkconfig_options:
       # 🚨 核心：强制单核模式，防止双核初始化导致崩溃
       CONFIG_FREERTOS_UNICORE: y
