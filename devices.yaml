@@ -17,6 +17,6 @@ devices:
     fan_topic: "zzwfan003"
   - id: kkt
     name: "客厅"
-    mac: "CDAB38700000"
+    mac: "99C984700000"
     light_topic: "kktlight002"
     fan_topic: "kktfan003"
