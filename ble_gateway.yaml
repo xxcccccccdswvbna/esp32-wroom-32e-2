@@ -85,8 +85,6 @@ ota:
   - platform: esphome
 api:
   reboot_timeout: 0s
-  custom_services: true          # 新增，必需
-  homeassistant_services: true   # 新增，必需
   services:
     - service: send_raw_hex
       variables:
@@ -98,11 +96,6 @@ external_components:
   - source:
       type: local
       path: components
-  - source: github://NicoIIT/esphome-ble_adv_proxy # 新增
-
-ble_adv_proxy:
-  use_max_tx_power: true # 可选，远距离时尝试最大发射功率
-  # adapter_name: "ble-3-proxy" # 可选，默认使用 esphome.name
 
 ble_tx:
   id: tx
