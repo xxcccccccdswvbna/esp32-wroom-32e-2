@@ -59,9 +59,9 @@ void BLETx::start_() {
   const esp_err_t err = esp_ble_gap_start_advertising(&p);
   if (err != ESP_OK) { fail_("start advertising rejected"); return; }
   state_ = State::ADVERTISING;
-  deadline_ = millis() + (phase_ == 0 ? 1200U : 600U);
+  deadline_ = millis() + (phase_ == 0 ? 500U : 300U);
   retries_ = 0;
-  ESP_LOGI(TAG, "phase %u broadcast %u ms, packet=%u bytes", phase_, phase_ == 0 ? 1200 : 600, (unsigned)data_.size());
+  ESP_LOGI(TAG, "phase %u broadcast %u ms, packet=%u bytes", phase_, phase_ == 0 ? 500 : 300, (unsigned)data_.size());
 }
 void BLETx::stop_() {
   const esp_err_t err = esp_ble_gap_stop_advertising();
