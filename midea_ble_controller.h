@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include "esphome/core/log.h"
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
@@ -64,7 +65,7 @@ inline std::string midea_build_cmd(const std::string &mac, const std::vector<uin
 inline uint8_t midea_kelvin_to_val(int kelvin) { return std::max(0, std::min(255, (int)std::round((kelvin - 2700.0) * 255.0 / 3800.0))); }
 inline uint8_t midea_pct_to_val(int pct) { return std::round(pct * 255.0 / 100.0); }
 
-inline std::string midea_light_on(const std::string &mac, int pct, int kelvin) { return midea_build_cmd(mac, {0x5B, midea_pct_to_val(pct), midea_kelvin_to_val(kelvin)}, 2, 4); }
+inline std::string midea_light_on(const std::string &mac, int pct=50, int kelvin=4600) { (void)pct; (void)kelvin; return midea_build_cmd(mac, {0x06}, 2, 4); }
 inline std::string midea_light_off(const std::string &mac) { return midea_build_cmd(mac, {0x06}, 2, 4); }
 inline std::string midea_light_brightness(const std::string &mac, int pct, int current_ct) { return midea_build_cmd(mac, {0x5B, midea_pct_to_val(pct), midea_kelvin_to_val(current_ct)}, 2, 4); }
 inline std::string midea_light_color_temp(const std::string &mac, int kelvin) { return midea_build_cmd(mac, {0x55, midea_kelvin_to_val(kelvin)}, 7, 12); }
@@ -80,6 +81,16 @@ inline std::string midea_fan_on(const std::string &mac, int speed) {
     return midea_build_cmd(mac, {cmd}, cf, ef);
 }
 inline std::string midea_fan_off(const std::string &mac) { return midea_build_cmd(mac, {0x09}, 8, 15); }
+// Official HomLux fan-light control commands (legacy 0x13, model 02/03/06/07)
+inline std::string midea_fan_nature(const std::string &mac) { return midea_build_cmd(mac, {0x1B}, 3, 9); }
+inline std::string midea_fan_reverse(const std::string &mac) { return midea_build_cmd(mac, {0x1C}, 6, 10); }
+inline std::string midea_display_toggle(const std::string &mac) { return midea_build_cmd(mac, {0x8C}, 1, 11); }
+inline std::string midea_fan_delay(const std::string &mac, int hours) {
+    uint8_t cmd = 0;
+    switch (hours) { case 0: cmd=0x50; break; case 1: cmd=0x52; break; case 2: cmd=0x53; break;
+      case 3: cmd=0x54; break; case 4: cmd=0x56; break; case 5: cmd=0x57; break; case 6: cmd=0x58; break; default: return ""; }
+    return midea_build_cmd(mac, {cmd}, 4, 8);
+}
 
 // ================================================================
 //                    2. 辅助函数 & 设备模型
@@ -123,13 +134,29 @@ static void set_device_mac(int idx, const std::string& mac_str) {
 // ================================================================
 struct BleQueueItem { std::string hex; uint32_t send_at; };
 static std::vector<BleQueueItem> g_ble_queue;
+static uint32_t g_ble_last_dispatch_ms = 0;
+static bool g_ble_has_dispatch = false;
 static std::function<void(const std::string&)> g_ble_send_fn = nullptr;
 static std::function<void(const char*, const char*)> g_mqtt_pub_fn = nullptr;
 
 static void ble_set_send_function(std::function<void(const std::string&)> fn) { g_ble_send_fn = fn; }
 static void mqtt_set_publish_function(std::function<void(const char*, const char*)> fn) { g_mqtt_pub_fn = fn; }
-static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) { g_ble_queue.push_back({hex, esphome::millis() + delay_ms}); }
-static void ble_queue_process() { if (!g_ble_queue.empty() && esphome::millis() >= g_ble_queue[0].send_at && g_ble_send_fn) { g_ble_send_fn(g_ble_queue[0].hex); g_ble_queue.erase(g_ble_queue.begin()); } }
+static void ble_queue_add(const std::string& hex, uint32_t delay_ms = 0) {
+    if (hex.empty()) return;
+    if (g_ble_queue.size() >= 32) { ESP_LOGW("midea_queue", "command queue full; dropping newest"); return; }
+    g_ble_queue.push_back({hex, esphome::millis() + delay_ms});
+}
+static void ble_queue_process() {
+    const uint32_t now = esphome::millis();
+    // Sender now performs control (1200 ms) + END (600 ms) lifecycle. Pace jobs
+    // so the 50 ms interval cannot flood its internal BLE queue.
+    if (!g_ble_queue.empty() && g_ble_send_fn && now >= g_ble_queue[0].send_at &&
+        (!g_ble_has_dispatch || now - g_ble_last_dispatch_ms >= 2300)) {
+        g_ble_send_fn(g_ble_queue[0].hex);
+        g_ble_last_dispatch_ms = now; g_ble_has_dispatch = true;
+        g_ble_queue.erase(g_ble_queue.begin());
+    }
+}
 
 static void device_publish_bemfa(MideaDevice& dev) {
     if (!g_mqtt_pub_fn || esphome::millis() - dev.last_publish_ms < 200) return;
@@ -164,7 +191,7 @@ static void handle_light_mqtt(int idx, const std::string& p) {
     if (idx < 0 || idx >= DEVICE_COUNT) return; MideaDevice& dev = g_devices[idx];
     if (p == "on") { dev.light_on = true; if(dev.brightness<1)dev.brightness=50; ble_queue_add(dev.cmd_light_on()); }
     else if (p == "off") { dev.light_on = false; ble_queue_add(dev.cmd_light_off()); }
-    else if (p.find("on#") == 0) { std::string r = p.substr(3); size_t pos = r.find('#'); dev.brightness = std::stoi(r.substr(0, pos)); if(pos!=std::string::npos){int v=std::stoi(r.substr(pos+1));if(v>=2700&&v<=6500)dev.color_temp=v;} dev.light_on = true; ble_queue_add(dev.cmd_light_on()); }
+    else if (p.find("on#") == 0) { std::string r = p.substr(3); size_t pos = r.find('#'); dev.brightness = std::stoi(r.substr(0, pos)); if(pos!=std::string::npos){int v=std::stoi(r.substr(pos+1));if(v>=2700&&v<=6500)dev.color_temp=v;} dev.light_on = true; ble_queue_add(dev.cmd_light_on()); ble_queue_add(dev.cmd_brightness(dev.brightness)); ble_queue_add(dev.cmd_color_temp(dev.color_temp)); }
     device_publish_bemfa(dev); if (g_sync_callback) g_sync_callback(idx, dev);
 }
 static void handle_fan_mqtt(int idx, const std::string& p) {
