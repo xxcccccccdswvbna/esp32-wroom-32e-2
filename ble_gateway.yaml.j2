@@ -66,6 +66,8 @@ ota:
   - platform: esphome
 api:
   reboot_timeout: 0s
+  custom_services: true
+  homeassistant_services: true
   services:
     - service: send_raw_hex
       variables:
@@ -78,6 +80,8 @@ external_components:
       type: local
       path: components
 
+  - source: github://NicoIIT/esphome-ble_adv_proxy
+
 ble_tx:
   id: tx
 
@@ -88,6 +92,9 @@ esp32_ble:
 bluetooth_proxy:
   active: true
   cache_services: true
+  
+ble_adv_proxy:
+  use_max_tx_power: true  
 
 # ===================== 全局变量 =====================
 globals:
